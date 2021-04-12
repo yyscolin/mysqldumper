@@ -331,32 +331,35 @@ elif [ ! -f "$backup_profile" ]; then
 fi
 
 # Get settings from backup profile
-settings_backup_count=$(cat "$backup_profile" | tr -d ' ' | grep ^backup_count=)
+settings_backup_count=$(cat "$backup_profile" | tr -d " " | grep ^backup_count=)
 if [ "$settings_backup_count" != "" ]; then
     backup_count=$(echo $settings_backup_count | head -n1 | cut -d= -f2-)
 fi
 
-settings_backup_dir=$(cat "$backup_profile" | tr -d ' ' | grep ^backup_dir=)
+settings_backup_dir=$(cat "$backup_profile" | tr -d " " | grep ^backup_dir=)
 if [ "$settings_backup_dir" != "" ]; then
     backup_dir=$(echo $settings_backup_dir | head -n1 | cut -d= -f2-)
 fi
 
-settings_backup_type=$(cat "$backup_profile" | tr -d ' ' | grep ^backup_type=)
+settings_backup_type=$(cat "$backup_profile" | tr -d " " | grep ^backup_type=)
 if [ "$settings_backup_type" != "" ]; then
     backup_type=$(echo $settings_backup_type | head -n1 | cut -d= -f2-)
 fi
 
-settings_upload_to=$(cat "$backup_profile" | tr -d ' ' | grep ^upload_to=)
+settings_upload_to=$(cat "$backup_profile" | tr -d " " | grep ^upload_to=)
 if [ "$settings_upload_to" != "" ]; then
     upload_to=$(echo $settings_upload_to | head -n1 | cut -d= -f2-)
 fi
 
-settings_remove_local=$(cat "$backup_profile" | tr -d ' ' | grep ^remove_local=)
+settings_remove_local=$(cat "$backup_profile" | tr -d " " | grep ^remove_local=)
 if [ "$settings_remove_local" != "" ]; then
     remove_local=$(echo $settings_remove_local | head -n1 | cut -d= -f2-)
 fi
 
-settings_zip_pass=$(cat "$backup_profile" | tr -d ' ' | grep ^zip_pass= | head -n1 | cut -d= -f2-)
+settings_zip_pass=$(cat "$backup_profile" | tr -d " " | grep ^zip_pass=)
+if [ "$settings_zip_pass" != "" ]; then
+    zip_pass=$(echo $settings_zip_pass | head -n1 | cut -d= -f2-)
+fi
 
 # Overwrite settings with values from arguments
 if [ "$arg_backup_count" != "" ]; then
@@ -377,6 +380,10 @@ fi
 
 if [ "$arg_remove_local" != "" ]; then
     remove_local="$arg_remove_local"
+fi
+
+if [ "$arg_zip_pass" != "" ]; then
+    zip_pass="$arg_zip_pass"
 fi
 
 # Check for logical errors
@@ -422,41 +429,39 @@ else
     ext=tar.7z
 fi
 
-if [ "$arg_zip_pass" != "" ]; then
-    zip_pass_opt=-p"$arg_zip_pass"
-elif [ "$settings_zip_pass" != "" ]; then
-    zip_pass_opt=-p"`cat "$backup_profile" | tr -d ' ' | grep ^zip_pass= | head -n1 | cut -d= -f2-`"
+if [ "$zip_pass" != "" ]; then
+    zip_pass_opt=-p"$zip_pass"
 fi
 
 # Init Google API; check errors and get auth token
 if [ "$upload_to" == "google" ]; then
-    if [ "$(cat "$backup_profile" | tr -d ' ' | grep ^client_id=)" == "" ]; then
+    client_id=$(cat "$backup_profile" | tr -d " " | grep ^client_id= | head -n1 | cut -d= -f2-)
+    if [ "$client_id" == "" ]; then
         echo Error: Google client_id not specified in $backup_profile
         exit 1
     fi
 
-    if [ "$(cat "$backup_profile" | tr -d ' ' | grep ^client_secret=)" == "" ]; then
+    client_secret=$(cat "$backup_profile" | tr -d " " | grep ^client_secret= | head -n1 | cut -d= -f2-)
+    if [ "$client_secret" == "" ]; then
         echo Error: Google client_secret not specified in $backup_profile
         exit 1
     fi
 
-    if [ "$(cat "$backup_profile" | tr -d ' ' | grep ^refresh_token=)" == "" ]; then
+    refresh_token=$(cat "$backup_profile" | tr -d " " | grep ^refresh_token= | head -n1 | cut -d= -f2-)
+    if [ "$refresh_token" == "" ]; then
         echo Error: Google refresh_token not specified in $backup_profile
         exit 1
     fi
-
-    if [ "$(cat "$backup_profile" | tr -d ' ' | grep ^folder=)" == "" ]; then
+    
+    folder=$(cat "$backup_profile" | tr -d " " | grep ^folder= | head -n1 | cut -d= -f2-)
+    if [ "$folder" == "" ]; then
         echo Error: Google folder not specified in $backup_profile
         exit 1
     fi
-    
-    # Delete existing auth_token in config file
-    sed -i '/^auth_token/d' "$backup_profile"
 
     # Generate new auth_token
     token_url=https://oauth2.googleapis.com/token
-    auth_token=$(curl -s -d client_id=`cat "$backup_profile" | tr -d ' ' | grep ^client_id= | head -n1 | cut -d= -f2-` -d client_secret=`cat "$backup_profile" | tr -d ' ' | grep ^client_secret= | head -n1 | cut -d= -f2-` -d refresh_token=`cat "$backup_profile" | tr -d ' ' | grep ^refresh_token= | head -n1 | cut -d= -f2-` -d grant_type=refresh_token $token_url | grep '"access_token":' | tr -d " " | cut -d\" -f 4)
-    echo auth_token=$auth_token >> $backup_profile
+    auth_token=$(curl -s -d client_id=$client_id -d client_secret=$client_secret -d refresh_token=$refresh_token -d grant_type=refresh_token $token_url | grep "\"access_token\":" | tr -d " " | cut -d\" -f 4)
 fi
 
 # Full backup
@@ -491,8 +496,8 @@ fi
 
 # Upload to cloud drives
 if [ "$upload_to" == "google" ]; then
-    curl -s -X POST -H "Authorization: Bearer `cat "$backup_profile" | tr -d ' ' | grep ^auth_token= | head -n1 | cut -d= -f2-`" \
-            -F "metadata={name :'mysql.$backup_type.$DATE.$TIME.$ext', parents: ['`cat "$backup_profile" | tr -d ' ' | grep ^folder= | head -n1 | cut -d= -f2-`']};type=application/json;charset=UTF-8;" \
+    curl -s -X POST -H "Authorization: Bearer $auth_token" \
+            -F "metadata={name :\"mysql.$backup_type.$DATE.$TIME.$ext\", parents: [\"$folder\"]};type=application/json;charset=UTF-8;" \
             -F "file=@$backup_dir/mysql.$backup_type.$DATE.$TIME.$ext;type=application/zip" \
             "https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart" &>/dev/null
 fi
@@ -505,14 +510,15 @@ fi
 # Housekeeping
 if [ $backup_count -gt 0 ]; then
     if [ "$upload_to" == "google" ]; then
-        files=$(curl -s -H "Authorization: Bearer `cat "$backup_profile" | tr -d ' ' | grep ^auth_token= | head -n1 | cut -d= -f2-`" "https://www.googleapis.com/drive/v3/files?orderBy=name&q=%22`cat "$backup_profile" | tr -d ' ' | grep ^folder= | head -n1 | cut -d= -f2-`%22%20in%20parents%20and%20name%20contains%20%22mysql.$backup_type%22" | tr -d ' ' | grep ^\"id\": | cut -d\" -f4 )
+        files_url="https://www.googleapis.com/drive/v3/files?orderBy=name&q=%22$folder%22%20in%20parents%20and%20name%20contains%20%22mysql.$backup_type%22"
+        files=$(curl -s -H "Authorization: Bearer $auth_token" $files_url | tr -d " " | grep ^\"id\": | cut -d\" -f4 )
         current_count=$(echo $files | wc -w)
         remove_count=$((current_count-backup_count))
 
         if [ $remove_count -gt 0 ]; then
             files_to_delete=$(echo $files | cut -d\  -f-$((remove_count)))
             for file_id in $files_to_delete; do
-                curl -s -X DELETE -H "Authorization: Bearer `cat "$backup_profile" | tr -d ' ' | grep ^auth_token= | head -n1 | cut -d= -f2-`" https://www.googleapis.com/drive/v3/files/$file_id
+                curl -s -X DELETE -H "Authorization: Bearer $auth_token" https://www.googleapis.com/drive/v3/files/$file_id
             done
         fi
     fi
