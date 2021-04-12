@@ -50,10 +50,37 @@ function get_input() {
 }
 
 # Start message
-echo -e "Installing MYSQLDUMP script for linux by Colin Ye - Installer v1.0\n"
+echo -e "Installing MYSQLDUMP script for linux by Colin Ye - Installer v1.01\n"
+
+# Setup cronjob user
+echo -n "Adding system account \"$CRON_USER_NAME\"... "
+cron_user_exists=$(grep -c ^$CRON_USER_NAME /etc/passwd)
+if [ "$cron_user_exists" == "0" ]; then
+    opt_group=""
+    opt_shell="-s /bin/false"
+
+    gid=$(getent group $CRON_USER_NAME | cut -d: -f3)
+    if [ "$gid" != "" ]; then
+        opt_group="-g $gid"
+    fi
+
+    mkdir -p $CRON_USER_HOME
+    useradd -r -d $CRON_USER_HOME $opt_shell $opt_group $CRON_USER_NAME
+    echo Done!
+else
+    echo -e "Already exists; Skipping...\n"
+fi
+
+mkdir -p $CRON_USER_HOME
+chown -R $CRON_USER_NAME:$CRON_USER_NAME $CRON_USER_HOME
+chmod 750 $CRON_USER_HOME
+
+mkdir -p $CRON_USER_HOME/$DUMP_FOLDER
+chown $CRON_USER_NAME:$CRON_USER_NAME $CRON_USER_HOME/$DUMP_FOLDER
+chmod 750 $CRON_USER_HOME/$DUMP_FOLDER
 
 # Prompt mysql information
-echo To begin, enter the following MySql information required for mysqldump
+echo Please enter the following MySql information
 
 mysql_host=$(get_input 0 Host $CRON_USER_HOME/.my.cnf host localhost)
 mysql_port=$(get_input 0 Port $CRON_USER_HOME/.my.cnf port 3306)
@@ -79,103 +106,6 @@ else
     exit 13
 fi
 
-# Prompt other information
-function prompt_backup_info() {
-    local cronjob_schedule_option
-    local cronjob_schedule_custom
-    local default_option=$2
-
-    echo -e "\nHow often to perform a \`$1\` backup?
-    0 - None
-    1 - every hour
-    2 - every day at 0400H
-    3 - every day at 0000H and 1200H
-    4 - every Sunday at 0400H
-    5 - every month on the 1st at 0400H
-    6 - Custom - You will edit the cronjob file later"
-    read -p "Your choice [$default_option]: " cronjob_schedule_option
-    while [ "$cronjob_schedule_option" != "" ] && \
-            [ "$cronjob_schedule_option" != "1" ] && \
-            [ "$cronjob_schedule_option" != "2" ] && \
-            [ "$cronjob_schedule_option" != "3" ] && \
-            [ "$cronjob_schedule_option" != "4" ] && \
-            [ "$cronjob_schedule_option" != "5" ] && \
-            [ "$cronjob_schedule_option" != "6" ] && \
-            [ "$cronjob_schedule_option" != "0" ]; do
-        read -p "Your choice [$default_option]: " cronjob_schedule
-    done
-    if [ "$cronjob_schedule_option" == "" ]; then
-        cronjob_schedule_option=$default_option
-    fi
-    if [ "$cronjob_schedule_option" == "1" ]; then
-        printf -v "cronjob_schedule_$1" "0 * * * *"
-    elif [ "$cronjob_schedule_option" == "2" ]; then
-        printf -v "cronjob_schedule_$1" "0 4 * * *"
-    elif [ "$cronjob_schedule_option" == "3" ]; then
-        printf -v "cronjob_schedule_$1" "0 0,12 * * *"
-    elif [ "$cronjob_schedule_option" == "4" ]; then
-        printf -v "cronjob_schedule_$1" "0 4 * * 0"
-    elif [ "$cronjob_schedule_option" == "5" ]; then
-        printf -v "cronjob_schedule_$1" "0 4 1 * *"
-    else
-        printf -v "cronjob_schedule_$1" "#* * * * *"
-    fi
-
-    if [ "$cronjob_schedule_option" != "0" ]; then
-        printf -v "backup_count_$1" $(get_input 0 "How many copies of \`$1\` backup to keep?" - - 7)
-    else
-        printf -v "backup_count_$1" 7
-    fi
-}
-
-prompt_backup_info full 2
-prompt_backup_info split 0
-printf "\n"
-
-# Prompt zip password
-zip_pass=$(get_input 1 "What password to use for 7z? (Leave blank for no password)")
-printf "\n"
-while [ ${#zip_pass} -gt 0 ] && [ ${#zip_pass} -le 4 ]; do
-    echo -e "\n7z Password should be more than 4 characters."
-    zip_pass=$(get_input 1 "What password to use for 7z? (Leave blank for no password)")
-    printf "\n"
-done
-if [ "$zip_pass" != "" ]; then
-    zip_pass_opt=-z\ \"${zip_pass//\"/\\\"}\"
-else
-    zip_pass_opt=""
-fi
-
-printf "\n"
-
-# Setup cronjob user
-cron_user_exists=$(grep -c ^$CRON_USER_NAME /etc/passwd)
-if [ "$cron_user_exists" == "0" ]; then
-    opt_group=""
-    opt_shell="-s /bin/false"
-
-    gid=$(getent group $CRON_USER_NAME | cut -d: -f3)
-    if [ "$gid" != "" ]; then
-        opt_group="-g $gid"
-    fi
-
-    echo -n "Adding system account \"$CRON_USER_NAME\"... "
-    mkdir -p $CRON_USER_HOME
-    useradd -r -d $CRON_USER_HOME $opt_shell $opt_group $CRON_USER_NAME
-    echo Done!
-fi
-
-mkdir -p $CRON_USER_HOME
-chown -R $CRON_USER_NAME:$CRON_USER_NAME $CRON_USER_HOME
-chmod 750 $CRON_USER_HOME
-
-mkdir -p $CRON_USER_HOME/$DUMP_FOLDER
-chown $CRON_USER_NAME:$CRON_USER_NAME $CRON_USER_HOME/$DUMP_FOLDER
-chmod 750 $CRON_USER_HOME/$DUMP_FOLDER
-
-# Begin installation
-echo Starting the installation process:
-
 # Store mysql information
 echo -n "Saving MySql configuration to \"$CRON_USER_HOME/.my.cnf\"... "
 echo "[client]
@@ -186,6 +116,72 @@ password = $mysql_pass" > $CRON_USER_HOME/.my.cnf
 chown $CRON_USER_NAME:$CRON_USER_NAME $CRON_USER_HOME/.my.cnf
 chmod 640 $CRON_USER_HOME/.my.cnf
 echo Done!
+
+# Prompt preset information
+function prompt_preset_info() {
+    local cronjob_schedule_option
+
+    echo -e "\nHow often to perform this backup?
+    0 - None
+    1 - every hour
+    2 - every day at 0400H
+    3 - every day at 0000H and 1200H
+    4 - every Sunday at 0400H
+    5 - every month on the 1st at 0400H
+    6 - Custom - You will edit the cronjob file later"
+    read -p "Your choice [2]: " cronjob_schedule_option
+    while [ "$cronjob_schedule_option" != "" ] && \
+            [ "$cronjob_schedule_option" != "1" ] && \
+            [ "$cronjob_schedule_option" != "2" ] && \
+            [ "$cronjob_schedule_option" != "3" ] && \
+            [ "$cronjob_schedule_option" != "4" ] && \
+            [ "$cronjob_schedule_option" != "5" ] && \
+            [ "$cronjob_schedule_option" != "6" ] && \
+            [ "$cronjob_schedule_option" != "0" ]; do
+        read -p "Your choice [2]: " cronjob_schedule
+    done
+
+    if [ "$cronjob_schedule_option" == "1" ]; then
+        cronjob_schedule="0 * * * *"
+    elif [ "$cronjob_schedule_option" == "2" ] || [ "$cronjob_schedule_option" == "" ]; then
+        cronjob_schedule="0 4 * * *"
+    elif [ "$cronjob_schedule_option" == "3" ]; then
+        cronjob_schedule="0 0,12 * * *"
+    elif [ "$cronjob_schedule_option" == "4" ]; then
+        cronjob_schedule="0 4 * * 0"
+    elif [ "$cronjob_schedule_option" == "5" ]; then
+        cronjob_schedule="0 4 1 * *"
+    else
+        cronjob_schedule="#* * * * *"
+    fi
+
+    # Dump location
+    echo "backup_dir=$CRON_USER_HOME/$DUMP_FOLDER" > $CRON_USER_HOME/preset.txt
+
+    # Housekeep info
+    if [ "$cronjob_schedule_option" != "0" ]; then
+        backup_count=$(get_input 0 "How many copies of this backup to keep?" - - 30)
+    else
+        backup_count=30
+    fi
+    echo "backup_count=$backup_count" >> $CRON_USER_HOME/preset.txt
+
+    # Zip password info
+    zip_pass=$(get_input 1 "What password to use for 7z? (Leave blank for no password)")
+    printf "\n"
+    while [ ${#zip_pass} -gt 0 ] && [ ${#zip_pass} -le 4 ]; do
+        echo -e "\n7z Password should be more than 4 characters."
+        zip_pass=$(get_input 1 "What password to use for 7z? (Leave blank for no password)")
+        printf "\n"
+    done
+    if [ "$zip_pass" != "" ]; then
+        zip_pass=${zip_pass//\"/\\\"}
+        echo "zip_pass=$zip_pass" >> $CRON_USER_HOME/preset.txt
+    fi
+}
+
+prompt_preset_info
+printf "\n"
 
 # Setup mysqldump script
 echo -n "Generating mysqldump script \"$CRON_USER_HOME/$DUMP_SCRIPT\"... "
@@ -543,8 +539,7 @@ echo Done!
 
 # Setup crontab
 echo -n "Writing the cronjob schedule to \"$CRON_TAB_FILE\"... "
-echo "$cronjob_schedule_full root su - $CRON_USER_NAME -s /bin/bash -c '$CRON_USER_HOME/$DUMP_SCRIPT -t full -d $CRON_USER_HOME/$DUMP_FOLDER -k $backup_count_full $zip_pass_opt'" > $CRON_TAB_FILE
-echo "$cronjob_schedule_split root su - $CRON_USER_NAME -s /bin/bash -c '$CRON_USER_HOME/$DUMP_SCRIPT -t split -d $CRON_USER_HOME/$DUMP_FOLDER -k $backup_count_split $zip_pass_opt'" >> $CRON_TAB_FILE
+echo "$cronjob_schedule root su - $CRON_USER_NAME -s /bin/bash -c '$CRON_USER_HOME/$DUMP_SCRIPT -p $CRON_USER_HOME/preset.txt'" > $CRON_TAB_FILE
 chmod 644 $CRON_TAB_FILE
 echo Done!
 
