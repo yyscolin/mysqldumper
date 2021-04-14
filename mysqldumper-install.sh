@@ -235,7 +235,7 @@ for arg in "$@"; do
         option_key="$arg"
         key_backup_profile="$arg"
     elif [ "$arg" == "-r" ] || [ "$arg" == "--remove-local" ]; then
-        remove_local=1
+        remove_local=y
     elif [ "$arg" == "-t" ] || [ "$arg" == "--type" ]; then
         option_key=$arg
         key_backup_type="$arg"
@@ -414,7 +414,7 @@ elif [ "$arg_zip_pass" != "" ] && [ ${#arg_zip_pass} -le 4 ]; then
 elif [ "$arg_zip_pass" == "" ] && [ "$settings_zip_pass" != "" ] && [ ${#settings_zip_pass} -le 4 ]; then
     echo Error: zip password must be longer than 4 characters.
     exit 1
-elif [ "$remove_local" == "1" ] && [ "$upload_to" == "" ]; then
+elif [ "$remove_local" == "y" ] && [ "$upload_to" == "" ]; then
     echo Error: cannot remove local backup file unless uploading a cloud drive.
 fi
 
@@ -449,9 +449,9 @@ if [ "$upload_to" == "google" ]; then
         exit 1
     fi
     
-    folder=$(cat "$backup_profile" | tr -d " " | grep ^folder= | head -n1 | cut -d= -f2-)
-    if [ "$folder" == "" ]; then
-        echo Error: Google folder not specified in $backup_profile
+    folder_id=$(cat "$backup_profile" | tr -d " " | grep ^folder_id= | head -n1 | cut -d= -f2-)
+    if [ "$folder_id" == "" ]; then
+        echo Error: Google folder ID not specified in $backup_profile
         exit 1
     fi
 
@@ -493,20 +493,20 @@ fi
 # Upload to cloud drives
 if [ "$upload_to" == "google" ]; then
     curl -s -X POST -H "Authorization: Bearer $auth_token" \
-            -F "metadata={name :\"mysql.$backup_type.$DATE.$TIME.$ext\", parents: [\"$folder\"]};type=application/json;charset=UTF-8;" \
+            -F "metadata={name :\"mysql.$backup_type.$DATE.$TIME.$ext\", parents: [\"$folder_id\"]};type=application/json;charset=UTF-8;" \
             -F "file=@$backup_dir/mysql.$backup_type.$DATE.$TIME.$ext;type=application/zip" \
             "https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart" &>/dev/null
 fi
 
 # Remove local copy
-if [ "$remove_local" == "1" ]; then
+if [ "$remove_local" == "y" ]; then
     rm "$backup_dir/mysql.$backup_type.$DATE.$TIME.$ext"
 fi
 
 # Housekeeping
 if [ $backup_count -gt 0 ]; then
     if [ "$upload_to" == "google" ]; then
-        files_url="https://www.googleapis.com/drive/v3/files?orderBy=name&q=%22$folder%22%20in%20parents%20and%20name%20contains%20%22mysql.$backup_type%22"
+        files_url="https://www.googleapis.com/drive/v3/files?orderBy=name&q=%22$folder_id%22%20in%20parents%20and%20name%20contains%20%22mysql.$backup_type%22"
         files=$(curl -s -H "Authorization: Bearer $auth_token" $files_url | tr -d " " | grep ^\"id\": | cut -d\" -f4 )
         current_count=$(echo $files | wc -w)
         remove_count=$((current_count-backup_count))
@@ -519,7 +519,7 @@ if [ $backup_count -gt 0 ]; then
         fi
     fi
 
-    if [ "$remove_local" != "1" ]; then
+    if [ "$remove_local" != "y" ]; then
         files=$(ls $backup_dir | grep -E "^mysql\.$backup_type\.[0-9]{4}-[0-9]{2}-[0-9]{2}\.[0-9]{4}\.$ext$")
         current_count=$(echo $files | wc -w)
         remove_count=$((current_count-backup_count))
