@@ -5,6 +5,7 @@ CRON_USER_NAME=mysqldumper
 CRON_USER_HOME=/srv/mysqldumper
 DUMP_FOLDER=mysqldumps
 DUMP_SCRIPT=mysqldump.sh
+PRESETS_FOLDER=presets
 
 DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
 
@@ -68,19 +69,32 @@ if [ "$cron_user_exists" == "0" ]; then
     useradd -r -d $CRON_USER_HOME $opt_shell $opt_group $CRON_USER_NAME
     echo Done!
 else
-    echo -e "Already exists; Skipping...\n"
+    echo "Already exists; Skipping..."
 fi
 
 mkdir -p $CRON_USER_HOME
 chown -R $CRON_USER_NAME:$CRON_USER_NAME $CRON_USER_HOME
 chmod 750 $CRON_USER_HOME
 
+echo -n "Creating $CRON_USER_HOME/$DUMP_FOLDER... "
 mkdir -p $CRON_USER_HOME/$DUMP_FOLDER
 chown $CRON_USER_NAME:$CRON_USER_NAME $CRON_USER_HOME/$DUMP_FOLDER
 chmod 750 $CRON_USER_HOME/$DUMP_FOLDER
+echo Done!
+
+echo -n "Creating $CRON_USER_HOME/$PRESETS_FOLDER... "
+mkdir -p $CRON_USER_HOME/$PRESETS_FOLDER
+chown $CRON_USER_NAME:$CRON_USER_NAME $CRON_USER_HOME/$PRESETS_FOLDER
+chmod 750 $CRON_USER_HOME/$PRESETS_FOLDER
+echo Done!
+
+echo -n "Creating $CRON_TAB_FILE... "
+touch -a $CRON_TAB_FILE
+chmod 644 $CRON_TAB_FILE
+echo Done!
 
 # Prompt mysql information
-echo Please enter the following MySql information
+echo -e "\nPlease enter the following MySql information:"
 
 mysql_host=$(get_input 0 Host $CRON_USER_HOME/.my.cnf host localhost)
 mysql_port=$(get_input 0 Port $CRON_USER_HOME/.my.cnf port 3306)
@@ -117,33 +131,67 @@ chown $CRON_USER_NAME:$CRON_USER_NAME $CRON_USER_HOME/.my.cnf
 chmod 640 $CRON_USER_HOME/.my.cnf
 echo Done!
 
-# Prompt preset information
-function prompt_preset_info() {
-    local cronjob_schedule_option
+# Confirm existing profiles
+preset_count=$(ls $CRON_USER_HOME/$PRESETS_FOLDER | wc -l)
+if [ "$preset_count" -gt 0 ]; then
+    echo -e "\nPlease confirm if you would like to keep the preset files below:"
+    for preset in "$CRON_USER_HOME/$PRESETS_FOLDER/"*; do
+        read -p "$preset? (y|n) [y]: " keep_preset
+        while [ "$keep_preset" != y ] && [ "$keep_preset" != n ] && [ "$keep_preset" != "" ]; do
+            read -p "$preset? (y|n) [y]: " keep_preset
+        done
+        if [ "$keep_preset" == n ]; then
+            rm $preset
+            preset=${preset//\//\\\/} # Escape /
+            preset=${preset//\./\\\.} # Escape .
+            sed -i "/.* -p $preset'/d" $CRON_TAB_FILE
+        fi
+    done
+fi
 
-    echo -e "\nHow often to perform this backup?
-    0 - None
-    1 - every hour
-    2 - every day at 0400H
-    3 - every day at 0000H and 1200H
-    4 - every Sunday at 0400H
-    5 - every month on the 1st at 0400H
-    6 - Custom - You will edit the cronjob file later"
-    read -p "Your choice [2]: " cronjob_schedule_option
+# Prompt preset information
+while true; do
+    # Check if creating preset needed
+    printf "\n"
+    preset_count=$(ls $CRON_USER_HOME/$PRESETS_FOLDER | wc -l)
+    if [ "$preset_count" == 0 ]; then
+        echo "Creating your first preset file..."
+    else
+        read -p "Would you like to create another preset file? (y|n) [n]: " preset_create
+        while [ "$preset_create" != y ] && [ "$preset_create" != n ] && [ "$preset_create" != "" ]; do
+            read -p "Would you like to create another preset file? (y|n) [n]: " preset_create
+        done
+        [[ "$preset_create" == n || "$preset_create" == "" ]] && break
+    fi
+    
+    # Preset name
+    preset_no=$((preset_count+1))
+    read -p "What would like to name this preset file? [Preset$preset_no.txt]: " preset_name
+    if [ "$preset_name" == "" ]; then
+        preset_name=Preset$preset_no.txt
+    fi
+
+    # Cronjob schedule
+    echo "How often to perform this backup?
+    [1] - every hour
+    [2] - every day at 0400H
+    [3] - every day at 0000H and 1200H
+    [4] - every Sunday at 0400H
+    [5] - every month on the 1st at 0400H
+    []  - Custom - You will edit the cronjob file later"
+    read -p "Your choice []: " cronjob_schedule_option
     while [ "$cronjob_schedule_option" != "" ] && \
             [ "$cronjob_schedule_option" != "1" ] && \
             [ "$cronjob_schedule_option" != "2" ] && \
             [ "$cronjob_schedule_option" != "3" ] && \
             [ "$cronjob_schedule_option" != "4" ] && \
-            [ "$cronjob_schedule_option" != "5" ] && \
-            [ "$cronjob_schedule_option" != "6" ] && \
-            [ "$cronjob_schedule_option" != "0" ]; do
-        read -p "Your choice [2]: " cronjob_schedule
+            [ "$cronjob_schedule_option" != "5" ]; do
+        read -p "Your choice []: " cronjob_schedule_option
     done
 
     if [ "$cronjob_schedule_option" == "1" ]; then
         cronjob_schedule="0 * * * *"
-    elif [ "$cronjob_schedule_option" == "2" ] || [ "$cronjob_schedule_option" == "" ]; then
+    elif [ "$cronjob_schedule_option" == "2" ]; then
         cronjob_schedule="0 4 * * *"
     elif [ "$cronjob_schedule_option" == "3" ]; then
         cronjob_schedule="0 0,12 * * *"
@@ -155,16 +203,8 @@ function prompt_preset_info() {
         cronjob_schedule="#* * * * *"
     fi
 
-    # Dump location
-    echo "backup_dir=$CRON_USER_HOME/$DUMP_FOLDER" > $CRON_USER_HOME/preset.txt
-
     # Housekeep info
-    if [ "$cronjob_schedule_option" != "0" ]; then
-        backup_count=$(get_input 0 "How many copies of this backup to keep?" - - 30)
-    else
-        backup_count=30
-    fi
-    echo "backup_count=$backup_count" >> $CRON_USER_HOME/preset.txt
+    backup_count=$(get_input 0 "How many copies of this backup to keep?" - - 30)
 
     # Zip password info
     zip_pass=$(get_input 1 "What password to use for 7z? (Leave blank for no password)")
@@ -174,17 +214,19 @@ function prompt_preset_info() {
         zip_pass=$(get_input 1 "What password to use for 7z? (Leave blank for no password)")
         printf "\n"
     done
-    if [ "$zip_pass" != "" ]; then
-        zip_pass=${zip_pass//\"/\\\"}
-        echo "zip_pass=$zip_pass" >> $CRON_USER_HOME/preset.txt
-    fi
-}
 
-prompt_preset_info
-printf "\n"
+    # Save configuration
+    echo "backup_dir=$CRON_USER_HOME/$DUMP_FOLDER" > $CRON_USER_HOME/$PRESETS_FOLDER/$preset_name
+    echo "backup_count=$backup_count" >> $CRON_USER_HOME/$PRESETS_FOLDER/$preset_name
+    if [ "$zip_pass" != "" ]; then
+        zip_pass=${zip_pass//\"/\\\"} # Escape /
+        echo "zip_pass=$zip_pass" >> $CRON_USER_HOME/$PRESETS_FOLDER/$preset_name
+    fi
+    echo "$cronjob_schedule root su - $CRON_USER_NAME -s /bin/bash -c '$CRON_USER_HOME/$DUMP_SCRIPT -p $CRON_USER_HOME/$PRESETS_FOLDER/$preset_name'" >> $CRON_TAB_FILE
+done
 
 # Setup mysqldump script
-echo -n "Generating mysqldump script \"$CRON_USER_HOME/$DUMP_SCRIPT\"... "
+echo -n -e "\nGenerating mysqldump script \"$CRON_USER_HOME/$DUMP_SCRIPT\"... "
 echo '#!/bin/bash
 
 DATE=$(date +%Y-%m-%d)
@@ -535,12 +577,6 @@ fi
 ' > $CRON_USER_HOME/$DUMP_SCRIPT
 chown $CRON_USER_NAME:$CRON_USER_NAME $CRON_USER_HOME/$DUMP_SCRIPT
 chmod 750 $CRON_USER_HOME/$DUMP_SCRIPT
-echo Done!
-
-# Setup crontab
-echo -n "Writing the cronjob schedule to \"$CRON_TAB_FILE\"... "
-echo "$cronjob_schedule root su - $CRON_USER_NAME -s /bin/bash -c '$CRON_USER_HOME/$DUMP_SCRIPT -p $CRON_USER_HOME/preset.txt'" > $CRON_TAB_FILE
-chmod 644 $CRON_TAB_FILE
 echo Done!
 
 # End
