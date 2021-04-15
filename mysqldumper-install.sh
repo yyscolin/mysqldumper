@@ -134,14 +134,17 @@ echo Done!
 # Confirm existing profiles
 preset_count=$(ls $CRON_USER_HOME/$PRESETS_FOLDER | wc -l)
 if [ "$preset_count" -gt 0 ]; then
-    echo -e "\nPlease confirm if you would like to keep the preset files below:"
+    echo -e "\nPlease confirm if you would like to keep the presets below:"
     for preset in "$CRON_USER_HOME/$PRESETS_FOLDER/"*; do
-        read -p "$preset? (y|n) [y]: " keep_preset
+        prompt_message="$(echo $preset | cut -d/ -f5-)? (y|n) [y]: "
+        read -p "$prompt_message" keep_preset
         while [ "$keep_preset" != y ] && [ "$keep_preset" != n ] && [ "$keep_preset" != "" ]; do
-            read -p "$preset? (y|n) [y]: " keep_preset
+            echo Error: Invalid option. Please try again.
+            read -p "$prompt_message" keep_preset
         done
         if [ "$keep_preset" == n ]; then
-            rm $preset
+            rm -rf $preset
+            preset=$preset'/settings.txt'
             preset=${preset//\//\\\/} # Escape /
             preset=${preset//\./\\\.} # Escape .
             sed -i "/.* -p $preset'/d" $CRON_TAB_FILE
@@ -155,20 +158,23 @@ while true; do
     printf "\n"
     preset_count=$(ls $CRON_USER_HOME/$PRESETS_FOLDER | wc -l)
     if [ "$preset_count" == 0 ]; then
-        echo "Creating your first preset file..."
+        echo "Creating your first preset..."
     else
-        read -p "Would you like to create another preset file? (y|n) [n]: " preset_create
+        read -p "Would you like to create another preset? (y|n) [n]: " preset_create
         while [ "$preset_create" != y ] && [ "$preset_create" != n ] && [ "$preset_create" != "" ]; do
-            read -p "Would you like to create another preset file? (y|n) [n]: " preset_create
+            read -p "Would you like to create another preset? (y|n) [n]: " preset_create
         done
         [[ "$preset_create" == n || "$preset_create" == "" ]] && break
     fi
     
     # Preset name
-    preset_no=$((preset_count+1))
-    read -p "What would like to name this preset file? [Preset$preset_no.txt]: " preset_name
+    preset_no=1
+    while [ -d $CRON_USER_HOME/$PRESETS_FOLDER/Preset$preset_no ]; do
+        preset_no=$((preset_no+1))
+    done
+    read -p "What would like to name this preset? [Preset$preset_no]: " preset_name
     if [ "$preset_name" == "" ]; then
-        preset_name=Preset$preset_no.txt
+        preset_name=Preset$preset_no
     fi
 
     # Cronjob schedule
@@ -215,14 +221,20 @@ while true; do
         printf "\n"
     done
 
+    # Create preset folder
+    mkdir -p $CRON_USER_HOME/$PRESETS_FOLDER/$preset_name
+    chown $CRON_USER_NAME:$CRON_USER_NAME $CRON_USER_HOME/$PRESETS_FOLDER/$preset_name
+    chmod 750 $CRON_USER_HOME/$PRESETS_FOLDER/$preset_name
+
     # Save configuration
-    echo "backup_dir=$CRON_USER_HOME/$DUMP_FOLDER" > $CRON_USER_HOME/$PRESETS_FOLDER/$preset_name
-    echo "backup_count=$backup_count" >> $CRON_USER_HOME/$PRESETS_FOLDER/$preset_name
+    echo "preset_name=$preset_name" > $CRON_USER_HOME/$PRESETS_FOLDER/$preset_name/settings.txt
+    echo "backup_dir=$CRON_USER_HOME/$DUMP_FOLDER" >> $CRON_USER_HOME/$PRESETS_FOLDER/$preset_name/settings.txt
+    echo "backup_count=$backup_count" >> $CRON_USER_HOME/$PRESETS_FOLDER/$preset_name/settings.txt
     if [ "$zip_pass" != "" ]; then
         zip_pass=${zip_pass//\"/\\\"} # Escape /
-        echo "zip_pass=$zip_pass" >> $CRON_USER_HOME/$PRESETS_FOLDER/$preset_name
+        echo "zip_pass=$zip_pass" >> $CRON_USER_HOME/$PRESETS_FOLDER/$preset_name/settings.txt
     fi
-    echo "$cronjob_schedule root su - $CRON_USER_NAME -s /bin/bash -c '$CRON_USER_HOME/$DUMP_SCRIPT -p $CRON_USER_HOME/$PRESETS_FOLDER/$preset_name'" >> $CRON_TAB_FILE
+    echo "$cronjob_schedule root su - $CRON_USER_NAME -s /bin/bash -c '$CRON_USER_HOME/$DUMP_SCRIPT -p $CRON_USER_HOME/$PRESETS_FOLDER/$preset_name/settings.txt'" >> $CRON_TAB_FILE
 done
 
 # Setup mysqldump script
