@@ -102,7 +102,7 @@ TIME=$(date +%H%M)
 DIR_SCRIPT="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
 DIR="$(pwd)"
 EXT=tar.7z
-VERSION="MySqlDump Script for Linux by Colin Ye - v1.01 (12th April 2021)"
+VERSION="MySqlDump Script for Linux by Colin Ye - v1.01 (15th April 2021)"
 
 VALUES_UPLOAD_TO="google"
 VALUES_BACKUP_TYPE="full split"
@@ -130,15 +130,19 @@ for arg in "$@"; do
     elif [ "$arg" == "-h" ] || [ "$arg" == "--help" ]; then
         echo -e "$VERSION\n"
         echo "Arguments"
-        echo "    -u --upload-to {google}          Upload a copy of the created backup file to a cloud drive"
         echo "    -d --dir <directory>             Create the backup file in the specified directory"
         echo "    -h --help                        Display the help section and exit"
-        echo "    -k --housekeep <#>               Keep only the latest # copies in the backup directory"
-        echo "    -p --profile                     Use the settings from the specified preset file"
-        echo "    -r --remove-local                Remove the local copy after uploading to cloud drive"
-        echo "    -t --type {full|split}           Specify the backup type; Default is \`full\` if not specified"
+        echo "    -k --housekeep [#]               Keep only the latest # copies in the backup directory"
+        echo "                                     Default is 30"
+        echo "                                     0 = no housekeeping"
+        echo "    -p --profile <file>              Use the settings from the specified preset file"
+        echo "    -r --remove-local [y|n]          Remove the local copy after uploading to cloud drive"
+        echo "                                     Default is y"
+        echo "    -t --type {full|split}           Specify the backup type"
+        echo "    -u --upload-to {google}          Upload a copy of the created backup file to a cloud drive"
         echo "    -v --version                     Display the version details and exit"
-        echo "    -z --zip-pass <password>         Set the password to protect the 7z archive"
+        echo "    -z --zip-pass [<password>]       Set the password to protect the 7z archive"
+        echo "                                     Blank = no password"
         exit 0
     elif [ "$arg" == "-k" ] || [ "$arg" == "--housekeep" ]; then
         option_key="$arg"
@@ -528,6 +532,7 @@ while true; do
     else
         read -p "Would you like to create another preset? (y|n) [n]: " preset_create
         while [ "$preset_create" != y ] && [ "$preset_create" != n ] && [ "$preset_create" != "" ]; do
+            echo Error: Invalid option. Please try again.
             read -p "Would you like to create another preset? (y|n) [n]: " preset_create
         done
         [[ "$preset_create" == n || "$preset_create" == "" ]] && break
