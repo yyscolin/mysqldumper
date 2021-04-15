@@ -216,10 +216,6 @@ elif [ "$key_backup_type" != "" ] && [ "$arg_backup_type" == "" ]; then
     echo Please specify the backup type. Or omit the $key_backup_type switch.
     echo Run the command with -h or --help for more details.
     exit 1
-elif [ "$key_backup_count" != "" ] && [ "$arg_backup_count" == "" ]; then
-    echo Please specify the number of backup copies to keep. Or omit the $key_backup_count switch.
-    echo Run the command with -h or --help for more details.
-    exit 1
 elif [ "$key_backup_profile" != "" ] && [ "$backup_profile" == "" ]; then
     echo Please specify the backup profile. Or omit the $key_backup_profile switch.
     echo Run the command with -h or --help for more details.
@@ -269,7 +265,9 @@ if [ "$settings_zip_pass" != "" ]; then
 fi
 
 # Overwrite settings with values from arguments
-if [ "$arg_backup_count" != "" ]; then
+if [ "$key_backup_count" != "" ] && [ "$arg_backup_count" == "" ]; then
+    backup_count=30
+elif [ "$arg_backup_count" != "" ]; then
     backup_count="$arg_backup_count"
 fi
 
