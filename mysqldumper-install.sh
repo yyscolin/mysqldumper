@@ -224,10 +224,6 @@ elif [ "$key_upload_to" != "" ] && [ "$arg_upload_to" == "" ]; then
     echo Please specify the upload destination. Or omit the $key_upload_to switch.
     echo Run the command with -h or --help for more details.
     exit 1
-elif [ "$key_zip_pass" != "" ] && [ "$arg_zip_pass" == "" ]; then
-    echo Please specify the password to protect 7z archives. Or omit the $key_zip_pass switch.
-    echo Run the command with -h or --help for more details.
-    exit 1
 elif [ ! -f "$backup_profile" ]; then
     echo Error: the backup profile \`$backup_profile\` settings file cannot be found.
     exit 1
@@ -287,7 +283,7 @@ if [ "$arg_remove_local" != "" ]; then
     remove_local="$arg_remove_local"
 fi
 
-if [ "$arg_zip_pass" != "" ]; then
+if [ "$key_zip_pass" != "" ]; then
     zip_pass="$arg_zip_pass"
 fi
 
@@ -327,6 +323,7 @@ elif [ "$remove_local" == "y" ] && [ "$upload_to" == "" ]; then
     echo Error: cannot remove local backup file unless uploading a cloud drive.
 fi
 
+# Set derived variables
 if [ "$zip_pass" != "" ]; then
     zip_pass_opt=-p"$zip_pass"
 fi
