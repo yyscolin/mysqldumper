@@ -239,6 +239,48 @@ while true; do
     echo -n "Writing cronjob schedule to \"$CRON_TAB_FILE\"... "
     echo "$cronjob_schedule root su - $CRON_USER_NAME -s /bin/bash -c '$CRON_USER_HOME/$DUMP_SCRIPT -p $CRON_USER_HOME/$PRESETS_FOLDER/$preset_name/settings.txt'" >> $CRON_TAB_FILE
     echo Done!
+
+    # Google Drive
+    printf "\n"
+    read -p "Would you also like to upload a copy of the backup file to Google Drive? (y|n) [n]: " upload_to_google
+    while [ "$upload_to_google" != y ] && [ "$upload_to_google" != n ] && [ "$upload_to_google" != "" ]; do
+        echo Error: Invalid option! Please try again.
+        read -p "Would you also like to upload a copy of the backup file to Google Drive? (y|n) [n]: " upload_to_google
+    done
+    if [ "$upload_to_google" == y ]; then
+        echo Please provide the following information for Google Drive API:
+        read -p "Client ID: " client_id
+        read -p "Client secret: " client_secret
+        read -p "Refresh token: " refresh_token
+        read -p "Folder ID: " folder_id
+        echo -n "Saving Google Drive configurations to \"$CRON_USER_HOME/$PRESETS_FOLDER/$preset_name/settings.txt\"... "
+        echo "upload_to=google" >> $CRON_USER_HOME/$PRESETS_FOLDER/$preset_name/settings.txt
+        echo "client_id=$client_id" >> $CRON_USER_HOME/$PRESETS_FOLDER/$preset_name/settings.txt
+        echo "client_secret=$client_secret" >> $CRON_USER_HOME/$PRESETS_FOLDER/$preset_name/settings.txt
+        echo "refresh_token=$refresh_token" >> $CRON_USER_HOME/$PRESETS_FOLDER/$preset_name/settings.txt
+        echo "folder_id=$folder_id" >> $CRON_USER_HOME/$PRESETS_FOLDER/$preset_name/settings.txt
+        echo Done!
+    fi
+
+    # Remove local
+    if [ "$upload_to_google" == y ]; then
+        printf "\n"
+        read -p "Would you like to remove the local copy after uploading to cloud drive(s)? (y|n) [n]: " remove_local
+        while [ "$remove_local" != y ] && [ "$remove_local" != n ] && [ "$remove_local" != "" ]; do
+            echo Error: Invalid option! Please try again.
+            read -p "Would you like to remove the local copy after uploading to cloud drive(s)? (y|n) [n]: " remove_local
+        done
+        if [ "$remove_local" == y ]; then
+            echo -n "Updating the settings in \"$CRON_USER_HOME/$PRESETS_FOLDER/$preset_name/settings.txt\"... "
+            echo "remove_local=y" >> $CRON_USER_HOME/$PRESETS_FOLDER/$preset_name/settings.txt
+            echo Done!
+        fi
+    fi
+
+    # Done
+    printf "\n"
+    echo Preset configuration done! Please try the below command after the installation:
+    echo sudo su - $CRON_USER_NAME -s /bin/bash -c \'$CRON_USER_HOME/$DUMP_SCRIPT -p $CRON_USER_HOME/$PRESETS_FOLDER/$preset_name/settings.txt\'
 done
 
 # Setup mysqldump script
