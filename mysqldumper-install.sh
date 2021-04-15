@@ -227,6 +227,7 @@ while true; do
     chmod 750 $CRON_USER_HOME/$PRESETS_FOLDER/$preset_name
 
     # Save configuration
+    echo -n "Saving settings to \"$CRON_USER_HOME/$PRESETS_FOLDER/$preset_name/settings.txt\"... "
     echo "preset_name=$preset_name" > $CRON_USER_HOME/$PRESETS_FOLDER/$preset_name/settings.txt
     echo "backup_dir=$CRON_USER_HOME/$DUMP_FOLDER" >> $CRON_USER_HOME/$PRESETS_FOLDER/$preset_name/settings.txt
     echo "backup_count=$backup_count" >> $CRON_USER_HOME/$PRESETS_FOLDER/$preset_name/settings.txt
@@ -234,7 +235,10 @@ while true; do
         zip_pass=${zip_pass//\"/\\\"} # Escape /
         echo "zip_pass=$zip_pass" >> $CRON_USER_HOME/$PRESETS_FOLDER/$preset_name/settings.txt
     fi
+    echo Done!
+    echo -n "Writing cronjob schedule to \"$CRON_TAB_FILE\"... "
     echo "$cronjob_schedule root su - $CRON_USER_NAME -s /bin/bash -c '$CRON_USER_HOME/$DUMP_SCRIPT -p $CRON_USER_HOME/$PRESETS_FOLDER/$preset_name/settings.txt'" >> $CRON_TAB_FILE
+    echo Done!
 done
 
 # Setup mysqldump script
