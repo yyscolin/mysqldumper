@@ -117,6 +117,7 @@ fi
 backup_count=0 #no housekeep
 backup_dir="$DIR"
 backup_type=full
+remove_local=n
 
 # Read arguments
 option_key=""
@@ -146,7 +147,8 @@ for arg in "$@"; do
         option_key="$arg"
         key_backup_profile="$arg"
     elif [ "$arg" == "-r" ] || [ "$arg" == "--remove-local" ]; then
-        remove_local=y
+        option_key=$arg
+        key_remove_local="$arg"
     elif [ "$arg" == "-t" ] || [ "$arg" == "--type" ]; then
         option_key=$arg
         key_backup_type="$arg"
@@ -181,6 +183,12 @@ for arg in "$@"; do
         else
             backup_profile="$DIR/$arg"
         fi
+    elif [ "$option_key" == "-r" ] || [ "$option_key" == "--remove-local" ]; then
+        option_key=""
+        arg_remove_local=$arg
+    elif [[ "$arg" == -r* ]]; then
+        key_remove_local=-r
+        arg_remove_local=${arg:2}
     elif [ "$option_key" == "-t" ] || [ "$option_key" == "--type" ]; then
         option_key=""
         arg_backup_type=$arg
@@ -279,7 +287,9 @@ if [ "$arg_upload_to" != "" ]; then
     upload_to="$arg_upload_to"
 fi
 
-if [ "$arg_remove_local" != "" ]; then
+if [ "$key_remove_local" != "" ] && [ "$arg_remove_local" == "" ]; then
+    remove_local=y
+elif [ "$arg_remove_local" != "" ]; then
     remove_local="$arg_remove_local"
 fi
 
@@ -318,6 +328,9 @@ elif [ "$arg_zip_pass" != "" ] && [ ${#arg_zip_pass} -le 4 ]; then
     exit 1
 elif [ "$arg_zip_pass" == "" ] && [ "$settings_zip_pass" != "" ] && [ ${#settings_zip_pass} -le 4 ]; then
     echo Error: zip password must be longer than 4 characters.
+    exit 1
+elif [ "$remove_local" != "y" ] && [ "$remove_local" != "n" ]; then
+    echo Error: Invalid valid for remove_local: \"$remove_local\": should only be \"y\" or \"n\".
     exit 1
 elif [ "$remove_local" == "y" ] && [ "$upload_to" == "" ]; then
     echo Error: cannot remove local backup file unless uploading a cloud drive.
