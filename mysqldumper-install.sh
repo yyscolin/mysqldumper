@@ -101,6 +101,7 @@ DATE=$(date +%Y-%m-%d)
 TIME=$(date +%H%M)
 DIR_SCRIPT="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
 DIR="$(pwd)"
+EXT=tar.7z
 VERSION="MySqlDump Script for Linux by Colin Ye - v1.01 (12th April 2021)"
 
 VALUES_UPLOAD_TO="google"
@@ -328,13 +329,6 @@ elif [ "$remove_local" == "y" ] && [ "$upload_to" == "" ]; then
     echo Error: cannot remove local backup file unless uploading a cloud drive.
 fi
 
-# Set derived variables
-if [ "$backup_type" == "full" ]; then
-    ext=sql.7z
-else
-    ext=tar.7z
-fi
-
 if [ "$zip_pass" != "" ]; then
     zip_pass_opt=-p"$zip_pass"
 fi
@@ -372,13 +366,13 @@ fi
 
 # Full backup
 if [ "$backup_type" == "full" ]; then
-	mysqldump=$(mysqldump --no-tablespaces --all-databases) || exit 1
-    echo "$mysqldump" | 7z a -si $zip_pass_opt "$backup_dir/mysql.$backup_type.$DATE.$TIME.$ext" &>/dev/null
+    mysqldump --no-tablespaces --all-databases > "$backup_dir/mysql.$backup_type.$DATE.$TIME.sql" || exit 1
+    tar -C "$backup_dir" -cf - mysql.$backup_type.$DATE.$TIME.sql --remove-files | 7z a -si $zip_pass_opt "$backup_dir/mysql.$backup_type.$DATE.$TIME.$EXT" &>/dev/null
     if [ $? -ne 0 ]; then
         echo Error: the script has encountered an error during the 7z compression process
         exit 1
     fi
-    chmod 640 "$backup_dir/mysql.$backup_type.$DATE.$TIME.$ext"
+    chmod 640 "$backup_dir/mysql.$backup_type.$DATE.$TIME.$EXT"
 
 # Split backup
 elif [ "$backup_type" == "split" ]; then
@@ -392,25 +386,25 @@ elif [ "$backup_type" == "split" ]; then
 		done
 	done
 	
-    tar -C "$backup_dir" -cf - mysql.$DATE.$TIME --remove-files | 7z a -si $zip_pass_opt "$backup_dir/mysql.$backup_type.$DATE.$TIME.$ext" &>/dev/null
+    tar -C "$backup_dir" -cf - mysql.$DATE.$TIME --remove-files | 7z a -si $zip_pass_opt "$backup_dir/mysql.$backup_type.$DATE.$TIME.$EXT" &>/dev/null
     if [ $? -ne 0 ]; then
         echo Error: the script has encountered an error during the 7z compression process
         exit 1
     fi
-    chmod 640 "$backup_dir/mysql.$backup_type.$DATE.$TIME.$ext"
+    chmod 640 "$backup_dir/mysql.$backup_type.$DATE.$TIME.$EXT"
 fi
 
 # Upload to cloud drives
 if [ "$upload_to" == "google" ]; then
     curl -s -X POST -H "Authorization: Bearer $auth_token" \
-            -F "metadata={name :\"mysql.$backup_type.$DATE.$TIME.$ext\", parents: [\"$folder_id\"]};type=application/json;charset=UTF-8;" \
-            -F "file=@$backup_dir/mysql.$backup_type.$DATE.$TIME.$ext;type=application/zip" \
+            -F "metadata={name :\"mysql.$backup_type.$DATE.$TIME.$EXT\", parents: [\"$folder_id\"]};type=application/json;charset=UTF-8;" \
+            -F "file=@$backup_dir/mysql.$backup_type.$DATE.$TIME.$EXT;type=application/zip" \
             "https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart" &>/dev/null
 fi
 
 # Remove local copy
 if [ "$remove_local" == "y" ]; then
-    rm "$backup_dir/mysql.$backup_type.$DATE.$TIME.$ext"
+    rm "$backup_dir/mysql.$backup_type.$DATE.$TIME.$EXT"
 fi
 
 # Housekeeping
@@ -430,7 +424,7 @@ if [ $backup_count -gt 0 ]; then
     fi
 
     if [ "$remove_local" != "y" ]; then
-        files=$(ls $backup_dir | grep -E "^mysql\.$backup_type\.[0-9]{4}-[0-9]{2}-[0-9]{2}\.[0-9]{4}\.$ext$")
+        files=$(ls $backup_dir | grep -E "^mysql\.$backup_type\.[0-9]{4}-[0-9]{2}-[0-9]{2}\.[0-9]{4}\.$EXT$")
         current_count=$(echo $files | wc -w)
         remove_count=$((current_count-backup_count))
 
