@@ -321,6 +321,7 @@ elif [ "$arg_zip_pass" == "" ] && [ "$settings_zip_pass" != "" ] && [ ${#setting
     exit 1
 elif [ "$remove_local" == "y" ] && [ "$upload_to" == "" ]; then
     echo Error: cannot remove local backup file unless uploading a cloud drive.
+    exit 1
 fi
 
 # Set derived variables
