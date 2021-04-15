@@ -165,11 +165,10 @@ for arg in "$@"; do
     # Set option value
     elif [ "$option_key" == "-d" ] || [ "$option_key" == "--dir" ]; then
         option_key=""
-        if [[ ${arg:0:1} == "/" ]]; then
-            arg_backup_dir="$arg"
-        else
-            arg_backup_dir="$DIR/$arg"
-        fi
+        arg_backup_dir="$arg"
+    elif [[ "$arg" == -d* ]]; then
+        key_backup_dir=-d
+        arg_backup_dir=${arg:2}
     elif [ "$option_key" == "-k" ] || [ "$option_key" == "--housekeep" ]; then
         option_key=""
         arg_backup_count=$arg
@@ -178,11 +177,10 @@ for arg in "$@"; do
         arg_backup_count=${arg:2}
     elif [ "$option_key" == "-p" ] || [ "$option_key" == "--profile" ]; then
         option_key=""
-        if [[ ${arg:0:1} == "/" ]]; then
-            backup_profile="$arg"
-        else
-            backup_profile="$DIR/$arg"
-        fi
+        backup_profile="$arg"
+    elif [[ "$arg" == -p* ]]; then
+        key_backup_profile=-p
+        backup_profile=${arg:2}
     elif [ "$option_key" == "-r" ] || [ "$option_key" == "--remove-local" ]; then
         option_key=""
         arg_remove_local=$arg
@@ -232,12 +230,23 @@ elif [ "$key_upload_to" != "" ] && [ "$arg_upload_to" == "" ]; then
     echo Please specify the upload destination. Or omit the $key_upload_to switch.
     echo Run the command with -h or --help for more details.
     exit 1
-elif [ ! -f "$backup_profile" ]; then
+fi
+
+# Parse path values
+if [[ ${backup_profile:0:1} != "/" ]]; then
+    backup_profile=$(realpath "$DIR/$backup_profile")
+fi
+
+if [[ ${arg_backup_dir:0:1} != "/" ]]; then
+    arg_backup_dir=$(realpath "$DIR/$arg_backup_dir")
+fi
+
+# Get settings from backup profile
+if [ ! -f "$backup_profile" ]; then
     echo Error: the backup profile \`$backup_profile\` settings file cannot be found.
     exit 1
 fi
 
-# Get settings from backup profile
 settings_backup_count=$(cat "$backup_profile" | tr -d " " | grep ^backup_count=)
 if [ "$settings_backup_count" != "" ]; then
     backup_count=$(echo $settings_backup_count | head -n1 | cut -d= -f2-)
