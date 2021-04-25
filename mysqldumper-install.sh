@@ -471,12 +471,10 @@ for ((i = 0; i < ${#cloud_drives[@]}; i++)); do
         fi
 
         # Upload to drive
-        if [ "$cloud_location" == "google_drive" ]; then
-            curl -s -X POST -H "Authorization: Bearer $auth_token" \
-                    -F "metadata={name :\"$name_prefix.$DATE.$TIME.$EXT\", parents: [\"$cloud_folder\"]};type=application/json;charset=UTF-8;" \
-                    -F "file=@$backup_dir/$name_prefix.$DATE.$TIME.$EXT;type=application/zip" \
-                    "https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart" &>/dev/null
-        fi
+        curl -s -X POST -H "Authorization: Bearer $auth_token" \
+                -F "metadata={name :\"$name_prefix.$DATE.$TIME.$EXT\", parents: [\"$cloud_folder\"]};type=application/json;charset=UTF-8;" \
+                -F "file=@$backup_dir/$name_prefix.$DATE.$TIME.$EXT;type=application/zip" \
+                "https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart" &>/dev/null
 
         # Housekeeping
         if [ $backup_count -gt 0 ]; then
