@@ -420,7 +420,7 @@ fi
 for ((i = 0; i < ${#cloud_drives[@]}; i++)); do
     cloud_file="${cloud_drives[$i]}"
     cloud_location=$(cat "$cloud_file" | tr -d " " | grep ^location= | head -n1 | cut -d= -f2-)
-    if [ "$cloud_location" == "google" ]; then
+    if [ "$cloud_location" == "google_drive" ]; then
         client_id=$(cat "$cloud_file" | tr -d " " | grep ^client_id= | head -n1 | cut -d= -f2-)
         if [ "$client_id" == "" ]; then
             echo Error: Google client_id not specified in $cloud_file
@@ -470,7 +470,7 @@ for ((i = 0; i < ${#cloud_drives[@]}; i++)); do
         fi
 
         # Upload to drive
-        if [ "$cloud_location" == "google" ]; then
+        if [ "$cloud_location" == "google_drive" ]; then
             curl -s -X POST -H "Authorization: Bearer $auth_token" \
                     -F "metadata={name :\"$name_prefix.$DATE.$TIME.$EXT\", parents: [\"$folder_id\"]};type=application/json;charset=UTF-8;" \
                     -F "file=@$backup_dir/$name_prefix.$DATE.$TIME.$EXT;type=application/zip" \
