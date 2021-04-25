@@ -424,7 +424,7 @@ fi
 for ((i = 0; i < ${#cloud_drives[@]}; i++)); do
     upload_to="${cloud_drives[$i]}"
     cloud_settings_file="$(echo $upload_to | cut -d\; -f1)"
-    cloud_folder="$(echo $upload_to | cut -d\; -f2-)"
+    cloud_folder="$(echo $upload_to | cut -s -d\; -f2-)"
 
     cloud_location=$(cat "$cloud_settings_file" | tr -d " " | grep ^location= | head -n1 | cut -d= -f2-)
     if [ "$cloud_location" == "google_drive" ]; then
@@ -471,13 +471,15 @@ for ((i = 0; i < ${#cloud_drives[@]}; i++)); do
         fi
 
         # Upload to drive
+        [ "$cloud_folder" != "" ] && opt_folder=", parents: [\"$cloud_folder\"]" || opt_folder=""
         curl -s -X POST -H "Authorization: Bearer $auth_token" \
-                -F "metadata={name :\"$name_prefix.$DATE.$TIME.$EXT\", parents: [\"$cloud_folder\"]};type=application/json;charset=UTF-8;" \
+                -F "metadata={name :\"$name_prefix.$DATE.$TIME.$EXT\"$opt_folder};type=application/json;charset=UTF-8;" \
                 -F "file=@$backup_dir/$name_prefix.$DATE.$TIME.$EXT;type=application/zip" \
                 "https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart" &>/dev/null
 
         # Housekeeping
         if [ $backup_count -gt 0 ]; then
+            [ "$cloud_folder" == "" ] && cloud_folder=root
             files_url="https://www.googleapis.com/drive/v3/files?orderBy=name&q=%22$cloud_folder%22%20in%20parents%20and%20name%20contains%20%22$name_prefix%22"
             files=$(curl -s -H "Authorization: Bearer $auth_token" $files_url | tr -d " " | grep ^\"id\": | cut -d\" -f4 )
             current_count=$(echo $files | wc -w)
