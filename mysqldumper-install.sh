@@ -116,6 +116,17 @@ function parse_dir() {
     echo $dir
 }
 
+function check_file_exists() {
+    local filepath="$1"
+    if [ ! -f "$filepath" ]; then
+        local fileitem="$2"
+        [ "$fileitem" == "" ] && fileitem=file
+        echo Error: the $fileitem \`$filepath\` does not exists.
+        echo Run the command with -h or --help for more details.
+        exit 1
+    fi
+}
+
 # Check for dependencies
 if ! command -v 7z &>/dev/null; then
     echo "Error: This script requires the package p7zip-full to be installed in your system"
@@ -201,9 +212,11 @@ for arg in "$@"; do
     elif [ "$option_key" == "-p" ] || [ "$option_key" == "--profile" ]; then
         option_key=""
         backup_profile="$arg"
+        check_file_exists "$backup_profile" "preset settings file"
     elif [[ "$arg" == -p* ]]; then
         key_backup_profile=-p
         backup_profile="$(parse_dir ${arg:2})"
+        check_file_exists "$backup_profile" "preset settings file"
     elif [ "$option_key" == "-r" ] || [ "$option_key" == "--remove-local" ]; then
         option_key=""
         arg_remove_local=$arg
@@ -219,9 +232,11 @@ for arg in "$@"; do
     elif [ "$option_key" == "-u" ] || [ "$option_key" == "--upload-to" ]; then
         option_key=""
         arg_upload_to="$(parse_dir $arg)"
+        check_file_exists "$arg_upload_to" "cloud drive settings file"
     elif [[ "$arg" == -u* ]]; then
         key_upload_to=-u
         arg_upload_to="$(parse_dir ${arg:2})"
+        check_file_exists "$arg_upload_to" "cloud drive settings file"
     elif [ "$option_key" == "-z" ] || [ "$option_key" == "--zip-pass" ]; then
         option_key=""
         arg_zip_pass="$arg"
@@ -261,11 +276,6 @@ fi
 
 # Get settings from backup profile
 if [ "$backup_profile" != "" ]; then
-    if [ ! -f "$backup_profile" ]; then
-        echo Error: the backup profile \`$backup_profile\` settings file cannot be found.
-        exit 1
-    fi
-
     settings_backup_count=$(cat "$backup_profile" | tr -d " " | grep ^backup_count=)
     if [ "$settings_backup_count" != "" ]; then
         backup_count=$(echo $settings_backup_count | head -n1 | cut -d= -f2-)
@@ -289,6 +299,7 @@ if [ "$backup_profile" != "" ]; then
     settings_upload_to=$(cat "$backup_profile" | tr -d " " | grep ^upload_to=)
     if [ "$settings_upload_to" != "" ]; then
         upload_to=$(echo $settings_upload_to | head -n1 | cut -d= -f2-)
+        check_file_exists "$upload_to" "cloud drive settings file"
     fi
 
     settings_remove_local=$(cat "$backup_profile" | tr -d " " | grep ^remove_local=)
