@@ -161,9 +161,10 @@ for arg in "$@"; do
         echo "    -r --remove-local [y|n]          Remove the local copy after uploading to cloud drive"
         echo "                                     Default is y"
         echo "    -t --type {full|split}           Specify the backup type"
-        echo "    -u --upload-to <file>            Upload a backup copy to a cloud drive based on the settings in the specified file"
+        echo "    -u --upload-to <file>[;<folder>] Upload a backup copy to a cloud drive based on the settings in <file>"
         echo "                                     Will be ignored if <file> is not provided"
-        echo "                                     Can be declared multiple times to upload to multiple cloud drives"
+        echo "                                     <folder> refers to the folder id in the cloud drive"
+        echo "                                     Can be declared multiple times to upload to multiple cloud drives/ folders"
         echo "                                     Will not overwrite the upload options in the preset file (if -p was specified)"
         echo "    -v --version                     Display the version details and exit"
         echo "    -z --zip-pass [<password>]       Set the password to protect the 7z archive"
@@ -236,12 +237,14 @@ for arg in "$@"; do
     elif [ "$option_key" == "-u" ] || [ "$option_key" == "--upload-to" ]; then
         option_key=""
         upload_to="$(parse_dir $arg)"
-        check_file_exists "$upload_to" "cloud drive settings file"
+        cloud_settings_file="$(echo $upload_to | cut -d\; -f1)"
+        check_file_exists "$cloud_settings_file" "cloud drive settings file"
         cloud_drives+=( "$upload_to" )
     elif [[ "$arg" == -u* ]]; then
         key_upload_to=-u
         upload_to="$(parse_dir ${arg:2})"
-        check_file_exists "$upload_to" "cloud drive settings file"
+        cloud_settings_file="$(echo $upload_to | cut -d\; -f1)"
+        check_file_exists "$cloud_settings_file" "cloud drive settings file"
         cloud_drives+=( "$upload_to" )
     elif [ "$option_key" == "-z" ] || [ "$option_key" == "--zip-pass" ]; then
         option_key=""
@@ -300,7 +303,8 @@ if [ "$backup_profile" != "" ]; then
 
     for upload_to in $(cat "$backup_profile" | tr -d " " | grep ^upload_to= | cut -d= -f2-); do
         if [ "$upload_to" != "" ]; then
-            check_file_exists "$upload_to" "cloud drive settings file"
+            cloud_settings_file="$(echo $upload_to | cut -d\; -f1)"
+            check_file_exists "$cloud_settings_file" "cloud drive settings file"
             cloud_drives+=( "$upload_to" )
         fi
     done
@@ -418,36 +422,33 @@ fi
 
 # Init cloud drives API and upload
 for ((i = 0; i < ${#cloud_drives[@]}; i++)); do
-    cloud_file="${cloud_drives[$i]}"
-    cloud_location=$(cat "$cloud_file" | tr -d " " | grep ^location= | head -n1 | cut -d= -f2-)
+    upload_to="${cloud_drives[$i]}"
+    cloud_settings_file="$(echo $upload_to | cut -d\; -f1)"
+    cloud_folder="$(echo $upload_to | cut -d\; -f2-)"
+
+    cloud_location=$(cat "$cloud_settings_file" | tr -d " " | grep ^location= | head -n1 | cut -d= -f2-)
     if [ "$cloud_location" == "google_drive" ]; then
-        client_id=$(cat "$cloud_file" | tr -d " " | grep ^client_id= | head -n1 | cut -d= -f2-)
+        client_id=$(cat "$cloud_settings_file" | tr -d " " | grep ^client_id= | head -n1 | cut -d= -f2-)
         if [ "$client_id" == "" ]; then
-            echo Error: Google client_id not specified in $cloud_file
+            echo Error: Google client_id not specified in $cloud_settings_file
             exit 1
         fi
 
-        client_secret=$(cat "$cloud_file" | tr -d " " | grep ^client_secret= | head -n1 | cut -d= -f2-)
+        client_secret=$(cat "$cloud_settings_file" | tr -d " " | grep ^client_secret= | head -n1 | cut -d= -f2-)
         if [ "$client_secret" == "" ]; then
-            echo Error: Google client_secret not specified in $cloud_file
+            echo Error: Google client_secret not specified in $cloud_settings_file
             exit 1
         fi
 
-        refresh_token=$(cat "$cloud_file" | tr -d " " | grep ^refresh_token= | head -n1 | cut -d= -f2-)
+        refresh_token=$(cat "$cloud_settings_file" | tr -d " " | grep ^refresh_token= | head -n1 | cut -d= -f2-)
         if [ "$refresh_token" == "" ]; then
-            echo Error: Google refresh_token not specified in $cloud_file
-            exit 1
-        fi
-
-        folder_id=$(cat "$cloud_file" | tr -d " " | grep ^folder_id= | head -n1 | cut -d= -f2-)
-        if [ "$folder_id" == "" ]; then
-            echo Error: Google folder ID not specified in $cloud_file
+            echo Error: Google refresh_token not specified in $cloud_settings_file
             exit 1
         fi
 
         # Check if access token is expired
         is_auth_expired=y
-        auth_expiry=$(cat "$cloud_file" | tr -d " " | grep ^auth_expiry= | tail -n1 | cut -d= -f2-)
+        auth_expiry=$(cat "$cloud_settings_file" | tr -d " " | grep ^auth_expiry= | tail -n1 | cut -d= -f2-)
         if [ "$auth_expiry" != "" ]; then
             datetime_now=$(date +%s)
             [ $(( datetime_now - auth_expiry )) -le 0 ] && is_auth_expired=n
@@ -455,31 +456,31 @@ for ((i = 0; i < ${#cloud_drives[@]}; i++)); do
 
         # Generate new auth_token if required
         if [ $is_auth_expired == y ]; then
-            sed -i "/^auth_token=.*/d" "$cloud_file"
-            sed -i "/^auth_expiry=.*/d" "$cloud_file"
+            sed -i "/^auth_token=.*/d" "$cloud_settings_file"
+            sed -i "/^auth_expiry=.*/d" "$cloud_settings_file"
 
             token_url=https://oauth2.googleapis.com/token
             curl_response=$(curl -s -d client_id=$client_id -d client_secret=$client_secret -d refresh_token=$refresh_token -d grant_type=refresh_token $token_url)
             auth_token=$(echo $curl_response | grep -o \"access_token\":\ [^,]* | cut -d\" -f 4)
             auth_expires_in=$(($(echo $curl_response | grep -o \"expires_in\":\ [^,]* | cut -d\  -f 2)-300))
             auth_expiry=$(date -d "+$auth_expires_in seconds" +%s)
-            echo "auth_token=$auth_token" >> "$cloud_file"
-            echo "auth_expiry=$auth_expiry" >> "$cloud_file"
+            echo "auth_token=$auth_token" >> "$cloud_settings_file"
+            echo "auth_expiry=$auth_expiry" >> "$cloud_settings_file"
         else
-            auth_token=$(cat "$cloud_file" | tr -d " " | grep ^auth_token= | tail -n1 | cut -d= -f2-)
+            auth_token=$(cat "$cloud_settings_file" | tr -d " " | grep ^auth_token= | tail -n1 | cut -d= -f2-)
         fi
 
         # Upload to drive
         if [ "$cloud_location" == "google_drive" ]; then
             curl -s -X POST -H "Authorization: Bearer $auth_token" \
-                    -F "metadata={name :\"$name_prefix.$DATE.$TIME.$EXT\", parents: [\"$folder_id\"]};type=application/json;charset=UTF-8;" \
+                    -F "metadata={name :\"$name_prefix.$DATE.$TIME.$EXT\", parents: [\"$cloud_folder\"]};type=application/json;charset=UTF-8;" \
                     -F "file=@$backup_dir/$name_prefix.$DATE.$TIME.$EXT;type=application/zip" \
                     "https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart" &>/dev/null
         fi
 
         # Housekeeping
         if [ $backup_count -gt 0 ]; then
-            files_url="https://www.googleapis.com/drive/v3/files?orderBy=name&q=%22$folder_id%22%20in%20parents%20and%20name%20contains%20%22$name_prefix%22"
+            files_url="https://www.googleapis.com/drive/v3/files?orderBy=name&q=%22$cloud_folder%22%20in%20parents%20and%20name%20contains%20%22$name_prefix%22"
             files=$(curl -s -H "Authorization: Bearer $auth_token" $files_url | tr -d " " | grep ^\"id\": | cut -d\" -f4 )
             current_count=$(echo $files | wc -w)
             remove_count=$((current_count-backup_count))
