@@ -104,7 +104,6 @@ DIR="$(pwd)"
 EXT=tar.7z
 VERSION="MySqlDump Script for Linux by Colin Ye - v1.01 (15th April 2021)"
 
-VALUES_UPLOAD_TO="google"
 VALUES_BACKUP_TYPE="full split"
 
 function parse_dir() {
@@ -150,7 +149,7 @@ for arg in "$@"; do
         echo "    -r --remove-local [y|n]          Remove the local copy after uploading to cloud drive"
         echo "                                     Default is y"
         echo "    -t --type {full|split}           Specify the backup type"
-        echo "    -u --upload-to {google}          Upload a copy of the created backup file to a cloud drive"
+        echo "    -u --upload-to <file>            Upload a backup copy to a cloud drive based on the settings in the specified file"
         echo "    -v --version                     Display the version details and exit"
         echo "    -z --zip-pass [<password>]       Set the password to protect the 7z archive"
         echo "                                     Blank = no password"
@@ -343,11 +342,9 @@ if [ ! -d "$backup_dir" ]; then
 elif [ ! -w "$backup_dir" ]; then
     echo Error: no permission to write to \"$backup_dir\"
     exit 1
-elif [[ ! ${VALUES_UPLOAD_TO[*]} =~ "$upload_to" ]]; then
-    echo Error: invalid backup destination: \`$upload_to\`.
-    if [ "$key_upload_to" != "" ]; then
-        echo Run the command with -h or --help for more details.
-    fi
+elif [[ "$upload_to" != "" && ! -f "$upload_to" ]]; then
+    echo Error: the cloud drive settings file \"$upload_to\" does not exists
+    [ "$key_upload_to" != "" ] && echo Run the command with -h or --help for more details.
     exit 1
 elif [[ ! ${VALUES_BACKUP_TYPE[*]} =~ "$backup_type" ]]; then
     echo Error: invalid backup type \`$backup_type\`.
@@ -383,29 +380,30 @@ fi
 
 [ "$name_prefix" == "" ] && name_prefix=mysqldumper.$backup_type
 
-# Init Google API; check errors and get auth token
-if [ "$upload_to" == "google" ]; then
-    client_id=$(cat "$backup_profile" | tr -d " " | grep ^client_id= | head -n1 | cut -d= -f2-)
+# Init cloud drive API; check errors and get auth token
+cloud_location=$(cat "$upload_to" | tr -d " " | grep ^location= | head -n1 | cut -d= -f2-)
+if [ "$cloud_location" == "google" ]; then
+    client_id=$(cat "$upload_to" | tr -d " " | grep ^client_id= | head -n1 | cut -d= -f2-)
     if [ "$client_id" == "" ]; then
-        echo Error: Google client_id not specified in $backup_profile
+        echo Error: Google client_id not specified in $upload_to
         exit 1
     fi
 
-    client_secret=$(cat "$backup_profile" | tr -d " " | grep ^client_secret= | head -n1 | cut -d= -f2-)
+    client_secret=$(cat "$upload_to" | tr -d " " | grep ^client_secret= | head -n1 | cut -d= -f2-)
     if [ "$client_secret" == "" ]; then
-        echo Error: Google client_secret not specified in $backup_profile
+        echo Error: Google client_secret not specified in $upload_to
         exit 1
     fi
 
-    refresh_token=$(cat "$backup_profile" | tr -d " " | grep ^refresh_token= | head -n1 | cut -d= -f2-)
+    refresh_token=$(cat "$upload_to" | tr -d " " | grep ^refresh_token= | head -n1 | cut -d= -f2-)
     if [ "$refresh_token" == "" ]; then
-        echo Error: Google refresh_token not specified in $backup_profile
+        echo Error: Google refresh_token not specified in $upload_to
         exit 1
     fi
     
-    folder_id=$(cat "$backup_profile" | tr -d " " | grep ^folder_id= | head -n1 | cut -d= -f2-)
+    folder_id=$(cat "$upload_to" | tr -d " " | grep ^folder_id= | head -n1 | cut -d= -f2-)
     if [ "$folder_id" == "" ]; then
-        echo Error: Google folder ID not specified in $backup_profile
+        echo Error: Google folder ID not specified in $upload_to
         exit 1
     fi
 
@@ -445,7 +443,7 @@ elif [ "$backup_type" == "split" ]; then
 fi
 
 # Upload to cloud drives
-if [ "$upload_to" == "google" ]; then
+if [ "$cloud_location" == "google" ]; then
     curl -s -X POST -H "Authorization: Bearer $auth_token" \
             -F "metadata={name :\"$name_prefix.$DATE.$TIME.$EXT\", parents: [\"$folder_id\"]};type=application/json;charset=UTF-8;" \
             -F "file=@$backup_dir/$name_prefix.$DATE.$TIME.$EXT;type=application/zip" \
@@ -459,7 +457,7 @@ fi
 
 # Housekeeping
 if [ $backup_count -gt 0 ]; then
-    if [ "$upload_to" == "google" ]; then
+    if [ "$cloud_location" == "google" ]; then
         files_url="https://www.googleapis.com/drive/v3/files?orderBy=name&q=%22$folder_id%22%20in%20parents%20and%20name%20contains%20%22$name_prefix%22"
         files=$(curl -s -H "Authorization: Bearer $auth_token" $files_url | tr -d " " | grep ^\"id\": | cut -d\" -f4 )
         current_count=$(echo $files | wc -w)
