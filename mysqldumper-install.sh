@@ -445,9 +445,29 @@ for ((i = 0; i < ${#cloud_drives[@]}; i++)); do
             exit 1
         fi
 
-        # Generate new auth_token
-        token_url=https://oauth2.googleapis.com/token
-        auth_token=$(curl -s -d client_id=$client_id -d client_secret=$client_secret -d refresh_token=$refresh_token -d grant_type=refresh_token $token_url | grep "\"access_token\":" | tr -d " " | cut -d\" -f 4)
+        # Check if access token is expired
+        is_auth_expired=y
+        auth_expiry=$(cat "$cloud_file" | tr -d " " | grep ^auth_expiry= | tail -n1 | cut -d= -f2-)
+        if [ "$auth_expiry" != "" ]; then
+            datetime_now=$(date +%s)
+            [ $(( datetime_now - auth_expiry )) -le 0 ] && is_auth_expired=n
+        fi
+
+        # Generate new auth_token if required
+        if [ $is_auth_expired == y ]; then
+            sed -i "/^auth_token=.*/d" "$cloud_file"
+            sed -i "/^auth_expiry=.*/d" "$cloud_file"
+
+            token_url=https://oauth2.googleapis.com/token
+            curl_response=$(curl -s -d client_id=$client_id -d client_secret=$client_secret -d refresh_token=$refresh_token -d grant_type=refresh_token $token_url)
+            auth_token=$(echo $curl_response | grep -o \"access_token\":\ [^,]* | cut -d\" -f 4)
+            auth_expires_in=$(($(echo $curl_response | grep -o \"expires_in\":\ [^,]* | cut -d\  -f 2)-300))
+            auth_expiry=$(date -d "+$auth_expires_in seconds" +%s)
+            echo "auth_token=$auth_token" >> "$cloud_file"
+            echo "auth_expiry=$auth_expiry" >> "$cloud_file"
+        else
+            auth_token=$(cat "$cloud_file" | tr -d " " | grep ^auth_token= | tail -n1 | cut -d= -f2-)
+        fi
 
         # Upload to drive
         if [ "$cloud_location" == "google" ]; then
