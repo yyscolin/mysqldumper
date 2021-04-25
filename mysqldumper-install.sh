@@ -391,6 +391,36 @@ fi
 
 [ "$name_prefix" == "" ] && name_prefix=mysqldumper.$backup_type
 
+# Full backup
+if [ "$backup_type" == "full" ]; then
+    mysqldump --no-tablespaces --all-databases > "$backup_dir/$name_prefix.$DATE.$TIME.sql" || exit 1
+    tar -C "$backup_dir" -cf - $name_prefix.$DATE.$TIME.sql --remove-files | 7z a -si $zip_pass_opt "$backup_dir/$name_prefix.$DATE.$TIME.$EXT" &>/dev/null
+    if [ $? -ne 0 ]; then
+        echo Error: the script has encountered an error during the 7z compression process
+        exit 1
+    fi
+    chmod 640 "$backup_dir/$name_prefix.$DATE.$TIME.$EXT"
+
+# Split backup
+elif [ "$backup_type" == "split" ]; then
+	databases=$(mysql -e "show databases" | tail -n+2 | grep -v -e information_schema -e mysql -e performance_schema -e sys) || exit 1
+	for db in $databases; do
+		mkdir -p "$backup_dir/mysql.$DATE.$TIME"
+
+		tables=$(mysql -D $db -e "show tables" | tail -n+2) || exit 1
+		for table in $tables; do
+			mysqldump --no-tablespaces $db $table > "$backup_dir/mysql.$DATE.$TIME/mysql.$DATE.$TIME.$db.$table.sql" || exit 1
+		done
+	done
+	
+    tar -C "$backup_dir" -cf - mysql.$DATE.$TIME --remove-files | 7z a -si $zip_pass_opt "$backup_dir/$name_prefix.$DATE.$TIME.$EXT" &>/dev/null
+    if [ $? -ne 0 ]; then
+        echo Error: the script has encountered an error during the 7z compression process
+        exit 1
+    fi
+    chmod 640 "$backup_dir/$name_prefix.$DATE.$TIME.$EXT"
+fi
+
 # Init cloud drive API; check errors and get auth token
 cloud_location=$(cat "$upload_to" | tr -d " " | grep ^location= | head -n1 | cut -d= -f2-)
 if [ "$cloud_location" == "google" ]; then
@@ -421,36 +451,6 @@ if [ "$cloud_location" == "google" ]; then
     # Generate new auth_token
     token_url=https://oauth2.googleapis.com/token
     auth_token=$(curl -s -d client_id=$client_id -d client_secret=$client_secret -d refresh_token=$refresh_token -d grant_type=refresh_token $token_url | grep "\"access_token\":" | tr -d " " | cut -d\" -f 4)
-fi
-
-# Full backup
-if [ "$backup_type" == "full" ]; then
-    mysqldump --no-tablespaces --all-databases > "$backup_dir/$name_prefix.$DATE.$TIME.sql" || exit 1
-    tar -C "$backup_dir" -cf - $name_prefix.$DATE.$TIME.sql --remove-files | 7z a -si $zip_pass_opt "$backup_dir/$name_prefix.$DATE.$TIME.$EXT" &>/dev/null
-    if [ $? -ne 0 ]; then
-        echo Error: the script has encountered an error during the 7z compression process
-        exit 1
-    fi
-    chmod 640 "$backup_dir/$name_prefix.$DATE.$TIME.$EXT"
-
-# Split backup
-elif [ "$backup_type" == "split" ]; then
-	databases=$(mysql -e "show databases" | tail -n+2 | grep -v -e information_schema -e mysql -e performance_schema -e sys) || exit 1
-	for db in $databases; do
-		mkdir -p "$backup_dir/mysql.$DATE.$TIME"
-
-		tables=$(mysql -D $db -e "show tables" | tail -n+2) || exit 1
-		for table in $tables; do
-			mysqldump --no-tablespaces $db $table > "$backup_dir/mysql.$DATE.$TIME/mysql.$DATE.$TIME.$db.$table.sql" || exit 1
-		done
-	done
-	
-    tar -C "$backup_dir" -cf - mysql.$DATE.$TIME --remove-files | 7z a -si $zip_pass_opt "$backup_dir/$name_prefix.$DATE.$TIME.$EXT" &>/dev/null
-    if [ $? -ne 0 ]; then
-        echo Error: the script has encountered an error during the 7z compression process
-        exit 1
-    fi
-    chmod 640 "$backup_dir/$name_prefix.$DATE.$TIME.$EXT"
 fi
 
 # Upload to cloud drives
