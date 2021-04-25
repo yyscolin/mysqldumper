@@ -251,53 +251,55 @@ elif [ "$key_upload_to" != "" ] && [ "$arg_upload_to" == "" ]; then
 fi
 
 # Parse path values
-if [[ ${backup_profile:0:1} != "/" ]]; then
+if [[ "$backup_profile" != "" && ${backup_profile:0:1} != "/" ]]; then
     backup_profile=$(realpath "$DIR/$backup_profile")
 fi
 
-if [[ ${arg_backup_dir:0:1} != "/" ]]; then
+if [[ "$arg_backup_dir" != "" && ${arg_backup_dir:0:1} != "/" ]]; then
     arg_backup_dir=$(realpath "$DIR/$arg_backup_dir")
 fi
 
 # Get settings from backup profile
-if [ ! -f "$backup_profile" ]; then
-    echo Error: the backup profile \`$backup_profile\` settings file cannot be found.
-    exit 1
-fi
+if [ "$backup_profile" != "" ]; then
+    if [ ! -f "$backup_profile" ]; then
+        echo Error: the backup profile \`$backup_profile\` settings file cannot be found.
+        exit 1
+    fi
 
-settings_backup_count=$(cat "$backup_profile" | tr -d " " | grep ^backup_count=)
-if [ "$settings_backup_count" != "" ]; then
-    backup_count=$(echo $settings_backup_count | head -n1 | cut -d= -f2-)
-fi
+    settings_backup_count=$(cat "$backup_profile" | tr -d " " | grep ^backup_count=)
+    if [ "$settings_backup_count" != "" ]; then
+        backup_count=$(echo $settings_backup_count | head -n1 | cut -d= -f2-)
+    fi
 
-settings_backup_dir=$(cat "$backup_profile" | tr -d " " | grep ^backup_dir=)
-if [ "$settings_backup_dir" != "" ]; then
-    backup_dir=$(echo $settings_backup_dir | head -n1 | cut -d= -f2-)
-fi
+    settings_backup_dir=$(cat "$backup_profile" | tr -d " " | grep ^backup_dir=)
+    if [ "$settings_backup_dir" != "" ]; then
+        backup_dir=$(echo $settings_backup_dir | head -n1 | cut -d= -f2-)
+    fi
 
-settings_backup_type=$(cat "$backup_profile" | tr -d " " | grep ^backup_type=)
-if [ "$settings_backup_type" != "" ]; then
-    backup_type=$(echo $settings_backup_type | head -n1 | cut -d= -f2-)
-fi
+    settings_backup_type=$(cat "$backup_profile" | tr -d " " | grep ^backup_type=)
+    if [ "$settings_backup_type" != "" ]; then
+        backup_type=$(echo $settings_backup_type | head -n1 | cut -d= -f2-)
+    fi
 
-settings_name_prefix=$(cat "$backup_profile" | tr -d " " | grep ^name_prefix=)
-if [ "$settings_name_prefix" != "" ]; then
-    name_prefix=$(echo $settings_name_prefix | head -n1 | cut -d= -f2-)
-fi
+    settings_name_prefix=$(cat "$backup_profile" | tr -d " " | grep ^name_prefix=)
+    if [ "$settings_name_prefix" != "" ]; then
+        name_prefix=$(echo $settings_name_prefix | head -n1 | cut -d= -f2-)
+    fi
 
-settings_upload_to=$(cat "$backup_profile" | tr -d " " | grep ^upload_to=)
-if [ "$settings_upload_to" != "" ]; then
-    upload_to=$(echo $settings_upload_to | head -n1 | cut -d= -f2-)
-fi
+    settings_upload_to=$(cat "$backup_profile" | tr -d " " | grep ^upload_to=)
+    if [ "$settings_upload_to" != "" ]; then
+        upload_to=$(echo $settings_upload_to | head -n1 | cut -d= -f2-)
+    fi
 
-settings_remove_local=$(cat "$backup_profile" | tr -d " " | grep ^remove_local=)
-if [ "$settings_remove_local" != "" ]; then
-    remove_local=$(echo $settings_remove_local | head -n1 | cut -d= -f2-)
-fi
+    settings_remove_local=$(cat "$backup_profile" | tr -d " " | grep ^remove_local=)
+    if [ "$settings_remove_local" != "" ]; then
+        remove_local=$(echo $settings_remove_local | head -n1 | cut -d= -f2-)
+    fi
 
-settings_zip_pass=$(cat "$backup_profile" | tr -d " " | grep ^zip_pass=)
-if [ "$settings_zip_pass" != "" ]; then
-    zip_pass=$(echo $settings_zip_pass | head -n1 | cut -d= -f2-)
+    settings_zip_pass=$(cat "$backup_profile" | tr -d " " | grep ^zip_pass=)
+    if [ "$settings_zip_pass" != "" ]; then
+        zip_pass=$(echo $settings_zip_pass | head -n1 | cut -d= -f2-)
+    fi
 fi
 
 # Overwrite settings with values from arguments
