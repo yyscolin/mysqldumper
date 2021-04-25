@@ -107,6 +107,16 @@ VERSION="MySqlDump Script for Linux by Colin Ye - v1.01 (15th April 2021)"
 VALUES_UPLOAD_TO="google"
 VALUES_BACKUP_TYPE="full split"
 
+function parse_dir() {
+    local dir="$1"
+    if [ ${dir:0:1} != "/" ]; then
+        local relative_dir="$2"
+        [ "$relative_dir" == "" ] && relative_dir="$DIR"
+        dir=$(realpath "$relative_dir/$dir")
+    fi
+    echo $dir
+}
+
 # Check for dependencies
 if ! command -v 7z &>/dev/null; then
     echo "Error: This script requires the package p7zip-full to be installed in your system"
@@ -173,10 +183,10 @@ for arg in "$@"; do
     # Set option value
     elif [ "$option_key" == "-d" ] || [ "$option_key" == "--dir" ]; then
         option_key=""
-        arg_backup_dir="$arg"
+        arg_backup_dir="$(parse_dir $arg)"
     elif [[ "$arg" == -d* ]]; then
         key_backup_dir=-d
-        arg_backup_dir=${arg:2}
+        arg_backup_dir="$(parse_dir ${arg:2})"
     elif [ "$option_key" == "-k" ] || [ "$option_key" == "--housekeep" ]; then
         option_key=""
         arg_backup_count=$arg
@@ -194,7 +204,7 @@ for arg in "$@"; do
         backup_profile="$arg"
     elif [[ "$arg" == -p* ]]; then
         key_backup_profile=-p
-        backup_profile=${arg:2}
+        backup_profile="$(parse_dir ${arg:2})"
     elif [ "$option_key" == "-r" ] || [ "$option_key" == "--remove-local" ]; then
         option_key=""
         arg_remove_local=$arg
@@ -209,10 +219,10 @@ for arg in "$@"; do
         arg_backup_type=${arg:2}
     elif [ "$option_key" == "-u" ] || [ "$option_key" == "--upload-to" ]; then
         option_key=""
-        arg_upload_to="$arg"
+        arg_upload_to="$(parse_dir $arg)"
     elif [[ "$arg" == -u* ]]; then
         key_upload_to=-u
-        arg_upload_to=${arg:2}
+        arg_upload_to="$(parse_dir ${arg:2})"
     elif [ "$option_key" == "-z" ] || [ "$option_key" == "--zip-pass" ]; then
         option_key=""
         arg_zip_pass="$arg"
@@ -248,15 +258,6 @@ elif [ "$key_upload_to" != "" ] && [ "$arg_upload_to" == "" ]; then
     echo Please specify the upload destination. Or omit the $key_upload_to switch.
     echo Run the command with -h or --help for more details.
     exit 1
-fi
-
-# Parse path values
-if [[ "$backup_profile" != "" && ${backup_profile:0:1} != "/" ]]; then
-    backup_profile=$(realpath "$DIR/$backup_profile")
-fi
-
-if [[ "$arg_backup_dir" != "" && ${arg_backup_dir:0:1} != "/" ]]; then
-    arg_backup_dir=$(realpath "$DIR/$arg_backup_dir")
 fi
 
 # Get settings from backup profile
