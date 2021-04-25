@@ -137,6 +137,7 @@ fi
 backup_count=0 #no housekeep
 backup_dir="$DIR"
 backup_type=full
+cloud_drives=()
 remove_local=n
 
 # Read arguments
@@ -161,6 +162,9 @@ for arg in "$@"; do
         echo "                                     Default is y"
         echo "    -t --type {full|split}           Specify the backup type"
         echo "    -u --upload-to <file>            Upload a backup copy to a cloud drive based on the settings in the specified file"
+        echo "                                     Will be ignored if <file> is not provided"
+        echo "                                     Can be declared multiple times to upload to multiple cloud drives"
+        echo "                                     Will not overwrite the upload options in the preset file (if -p was specified)"
         echo "    -v --version                     Display the version details and exit"
         echo "    -z --zip-pass [<password>]       Set the password to protect the 7z archive"
         echo "                                     Blank = no password"
@@ -231,12 +235,14 @@ for arg in "$@"; do
         arg_backup_type=${arg:2}
     elif [ "$option_key" == "-u" ] || [ "$option_key" == "--upload-to" ]; then
         option_key=""
-        arg_upload_to="$(parse_dir $arg)"
-        check_file_exists "$arg_upload_to" "cloud drive settings file"
+        upload_to="$(parse_dir $arg)"
+        check_file_exists "$upload_to" "cloud drive settings file"
+        cloud_drives+=( "$upload_to" )
     elif [[ "$arg" == -u* ]]; then
         key_upload_to=-u
-        arg_upload_to="$(parse_dir ${arg:2})"
-        check_file_exists "$arg_upload_to" "cloud drive settings file"
+        upload_to="$(parse_dir ${arg:2})"
+        check_file_exists "$upload_to" "cloud drive settings file"
+        cloud_drives+=( "$upload_to" )
     elif [ "$option_key" == "-z" ] || [ "$option_key" == "--zip-pass" ]; then
         option_key=""
         arg_zip_pass="$arg"
@@ -268,10 +274,6 @@ elif [ "$key_name_prefix" != "" ] && [ "$arg_name_prefix" == "" ]; then
     echo Please specify the name prefix. Or omit the $key_name_prefix switch.
     echo Run the command with -h or --help for more details.
     exit 1
-elif [ "$key_upload_to" != "" ] && [ "$arg_upload_to" == "" ]; then
-    echo Please specify the upload destination. Or omit the $key_upload_to switch.
-    echo Run the command with -h or --help for more details.
-    exit 1
 fi
 
 # Get settings from backup profile
@@ -296,11 +298,12 @@ if [ "$backup_profile" != "" ]; then
         name_prefix=$(echo $settings_name_prefix | head -n1 | cut -d= -f2-)
     fi
 
-    settings_upload_to=$(cat "$backup_profile" | tr -d " " | grep ^upload_to=)
-    if [ "$settings_upload_to" != "" ]; then
-        upload_to=$(echo $settings_upload_to | head -n1 | cut -d= -f2-)
-        check_file_exists "$upload_to" "cloud drive settings file"
-    fi
+    for upload_to in $(cat "$backup_profile" | tr -d " " | grep ^upload_to= | cut -d= -f2-); do
+        if [ "$upload_to" != "" ]; then
+            check_file_exists "$upload_to" "cloud drive settings file"
+            cloud_drives+=( "$upload_to" )
+        fi
+    done
 
     settings_remove_local=$(cat "$backup_profile" | tr -d " " | grep ^remove_local=)
     if [ "$settings_remove_local" != "" ]; then
@@ -332,10 +335,6 @@ if [ "$arg_name_prefix" != "" ]; then
     name_prefix="$arg_name_prefix"
 fi
 
-if [ "$arg_upload_to" != "" ]; then
-    upload_to="$arg_upload_to"
-fi
-
 if [ "$key_remove_local" != "" ] && [ "$arg_remove_local" == "" ]; then
     remove_local=y
 elif [ "$arg_remove_local" != "" ]; then
@@ -352,10 +351,6 @@ if [ ! -d "$backup_dir" ]; then
     exit 1
 elif [ ! -w "$backup_dir" ]; then
     echo Error: no permission to write to \"$backup_dir\"
-    exit 1
-elif [[ "$upload_to" != "" && ! -f "$upload_to" ]]; then
-    echo Error: the cloud drive settings file \"$upload_to\" does not exists
-    [ "$key_upload_to" != "" ] && echo Run the command with -h or --help for more details.
     exit 1
 elif [[ ! ${VALUES_BACKUP_TYPE[*]} =~ "$backup_type" ]]; then
     echo Error: invalid backup type \`$backup_type\`.
@@ -421,78 +416,79 @@ elif [ "$backup_type" == "split" ]; then
     chmod 640 "$backup_dir/$name_prefix.$DATE.$TIME.$EXT"
 fi
 
-# Init cloud drive API; check errors and get auth token
-cloud_location=$(cat "$upload_to" | tr -d " " | grep ^location= | head -n1 | cut -d= -f2-)
-if [ "$cloud_location" == "google" ]; then
-    client_id=$(cat "$upload_to" | tr -d " " | grep ^client_id= | head -n1 | cut -d= -f2-)
-    if [ "$client_id" == "" ]; then
-        echo Error: Google client_id not specified in $upload_to
-        exit 1
-    fi
+# Init cloud drives API and upload
+for ((i = 0; i < ${#cloud_drives[@]}; i++)); do
+    cloud_file="${cloud_drives[$i]}"
+    cloud_location=$(cat "$cloud_file" | tr -d " " | grep ^location= | head -n1 | cut -d= -f2-)
+    if [ "$cloud_location" == "google" ]; then
+        client_id=$(cat "$cloud_file" | tr -d " " | grep ^client_id= | head -n1 | cut -d= -f2-)
+        if [ "$client_id" == "" ]; then
+            echo Error: Google client_id not specified in $cloud_file
+            exit 1
+        fi
 
-    client_secret=$(cat "$upload_to" | tr -d " " | grep ^client_secret= | head -n1 | cut -d= -f2-)
-    if [ "$client_secret" == "" ]; then
-        echo Error: Google client_secret not specified in $upload_to
-        exit 1
-    fi
+        client_secret=$(cat "$cloud_file" | tr -d " " | grep ^client_secret= | head -n1 | cut -d= -f2-)
+        if [ "$client_secret" == "" ]; then
+            echo Error: Google client_secret not specified in $cloud_file
+            exit 1
+        fi
 
-    refresh_token=$(cat "$upload_to" | tr -d " " | grep ^refresh_token= | head -n1 | cut -d= -f2-)
-    if [ "$refresh_token" == "" ]; then
-        echo Error: Google refresh_token not specified in $upload_to
-        exit 1
-    fi
-    
-    folder_id=$(cat "$upload_to" | tr -d " " | grep ^folder_id= | head -n1 | cut -d= -f2-)
-    if [ "$folder_id" == "" ]; then
-        echo Error: Google folder ID not specified in $upload_to
-        exit 1
-    fi
+        refresh_token=$(cat "$cloud_file" | tr -d " " | grep ^refresh_token= | head -n1 | cut -d= -f2-)
+        if [ "$refresh_token" == "" ]; then
+            echo Error: Google refresh_token not specified in $cloud_file
+            exit 1
+        fi
 
-    # Generate new auth_token
-    token_url=https://oauth2.googleapis.com/token
-    auth_token=$(curl -s -d client_id=$client_id -d client_secret=$client_secret -d refresh_token=$refresh_token -d grant_type=refresh_token $token_url | grep "\"access_token\":" | tr -d " " | cut -d\" -f 4)
-fi
+        folder_id=$(cat "$cloud_file" | tr -d " " | grep ^folder_id= | head -n1 | cut -d= -f2-)
+        if [ "$folder_id" == "" ]; then
+            echo Error: Google folder ID not specified in $cloud_file
+            exit 1
+        fi
 
-# Upload to cloud drives
-if [ "$cloud_location" == "google" ]; then
-    curl -s -X POST -H "Authorization: Bearer $auth_token" \
-            -F "metadata={name :\"$name_prefix.$DATE.$TIME.$EXT\", parents: [\"$folder_id\"]};type=application/json;charset=UTF-8;" \
-            -F "file=@$backup_dir/$name_prefix.$DATE.$TIME.$EXT;type=application/zip" \
-            "https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart" &>/dev/null
-fi
+        # Generate new auth_token
+        token_url=https://oauth2.googleapis.com/token
+        auth_token=$(curl -s -d client_id=$client_id -d client_secret=$client_secret -d refresh_token=$refresh_token -d grant_type=refresh_token $token_url | grep "\"access_token\":" | tr -d " " | cut -d\" -f 4)
+
+        # Upload to drive
+        if [ "$cloud_location" == "google" ]; then
+            curl -s -X POST -H "Authorization: Bearer $auth_token" \
+                    -F "metadata={name :\"$name_prefix.$DATE.$TIME.$EXT\", parents: [\"$folder_id\"]};type=application/json;charset=UTF-8;" \
+                    -F "file=@$backup_dir/$name_prefix.$DATE.$TIME.$EXT;type=application/zip" \
+                    "https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart" &>/dev/null
+        fi
+
+        # Housekeeping
+        if [ $backup_count -gt 0 ]; then
+            files_url="https://www.googleapis.com/drive/v3/files?orderBy=name&q=%22$folder_id%22%20in%20parents%20and%20name%20contains%20%22$name_prefix%22"
+            files=$(curl -s -H "Authorization: Bearer $auth_token" $files_url | tr -d " " | grep ^\"id\": | cut -d\" -f4 )
+            current_count=$(echo $files | wc -w)
+            remove_count=$((current_count-backup_count))
+            if [ $remove_count -gt 0 ]; then
+                files_to_delete=$(echo $files | cut -d\  -f-$((remove_count)))
+                for file_id in $files_to_delete; do
+                    curl -s -X DELETE -H "Authorization: Bearer $auth_token" https://www.googleapis.com/drive/v3/files/$file_id
+                done
+            fi
+        fi
+    fi
+done
 
 # Remove local copy
 if [ "$remove_local" == "y" ]; then
     rm "$backup_dir/$name_prefix.$DATE.$TIME.$EXT"
 fi
 
-# Housekeeping
-if [ $backup_count -gt 0 ]; then
-    if [ "$cloud_location" == "google" ]; then
-        files_url="https://www.googleapis.com/drive/v3/files?orderBy=name&q=%22$folder_id%22%20in%20parents%20and%20name%20contains%20%22$name_prefix%22"
-        files=$(curl -s -H "Authorization: Bearer $auth_token" $files_url | tr -d " " | grep ^\"id\": | cut -d\" -f4 )
-        current_count=$(echo $files | wc -w)
-        remove_count=$((current_count-backup_count))
+# Local housekeep
+if [[ $backup_count -gt 0 && "$remove_local" != "y" ]]; then
+    files=$(ls $backup_dir | grep -E "^mysql\.$backup_type\.[0-9]{4}-[0-9]{2}-[0-9]{2}\.[0-9]{4}\.$EXT$")
+    current_count=$(echo $files | wc -w)
+    remove_count=$((current_count-backup_count))
 
-        if [ $remove_count -gt 0 ]; then
-            files_to_delete=$(echo $files | cut -d\  -f-$((remove_count)))
-            for file_id in $files_to_delete; do
-                curl -s -X DELETE -H "Authorization: Bearer $auth_token" https://www.googleapis.com/drive/v3/files/$file_id
-            done
-        fi
-    fi
-
-    if [ "$remove_local" != "y" ]; then
-        files=$(ls $backup_dir | grep -E "^mysql\.$backup_type\.[0-9]{4}-[0-9]{2}-[0-9]{2}\.[0-9]{4}\.$EXT$")
-        current_count=$(echo $files | wc -w)
-        remove_count=$((current_count-backup_count))
-
-        if [ $remove_count -gt 0 ]; then
-            files_to_delete=$(echo $files | cut -d\  -f-$((remove_count)))
-            for file in $files_to_delete; do
-                rm "$backup_dir/$file"
-            done
-        fi
+    if [$remove_count -gt 0 ]; then
+        files_to_delete=$(echo $files | cut -d\  -f-$((remove_count)))
+        for file in $files_to_delete; do
+            rm "$backup_dir/$file"
+        done
     fi
 fi
 ' > $CRON_USER_HOME/$DUMP_SCRIPT
