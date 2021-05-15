@@ -97,8 +97,6 @@ echo Done!
 echo -n "Generating mysqldump script $CRON_USER_HOME/$DUMP_SCRIPT... "
 echo '#!/bin/bash
 
-DATE=$(date +%Y-%m-%d)
-TIME=$(date +%H%M)
 DIR_SCRIPT="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
 DIR="$(pwd)"
 EXT=tar.7z
@@ -156,7 +154,7 @@ for arg in "$@"; do
         echo "    -k --housekeep [#]               Keep only the latest # copies in the backup directory"
         echo "                                     Default is 30"
         echo "                                     0 = no housekeeping"
-        echo "    -n --name-prefix <name>          Specify the prefix for backup file name"
+        echo "    -n --name <filename>             Specify the backup file naming convention"
         echo "    -p --profile <file>              Use the settings from the specified preset file"
         echo "    -r --remove-local [y|n]          Remove the local copy after uploading to cloud drive"
         echo "                                     Default is y"
@@ -173,9 +171,9 @@ for arg in "$@"; do
     elif [ "$arg" == "-k" ] || [ "$arg" == "--housekeep" ]; then
         option_key="$arg"
         key_backup_count="$arg"
-    elif [ "$arg" == "-n" ] || [ "$arg" == "--name-prefix" ]; then
+    elif [ "$arg" == "-n" ] || [ "$arg" == "--name" ]; then
         option_key="$arg"
-        key_name_prefix="$arg"
+        key_backup_filename="$arg"
     elif [ "$arg" == "-p" ] || [ "$arg" == "--profile" ]; then
         option_key="$arg"
         key_backup_profile="$arg"
@@ -208,12 +206,12 @@ for arg in "$@"; do
     elif [[ "$arg" == -k* ]]; then
         key_backup_count=-k
         arg_backup_count=${arg:2}
-    elif [ "$option_key" == "-n" ] || [ "$option_key" == "--name-prefix" ]; then
+    elif [ "$option_key" == "-n" ] || [ "$option_key" == "--name" ]; then
         option_key=""
-        arg_name_prefix=$arg
+        arg_backup_filename=$arg
     elif [[ "$arg" == -n* ]]; then
-        key_name_prefix=-n
-        arg_name_prefix=${arg:2}
+        key_backup_filename=-n
+        arg_backup_filename=${arg:2}
     elif [ "$option_key" == "-p" ] || [ "$option_key" == "--profile" ]; then
         option_key=""
         backup_profile="$arg"
@@ -273,8 +271,8 @@ elif [ "$key_backup_profile" != "" ] && [ "$backup_profile" == "" ]; then
     echo Please specify the backup profile. Or omit the $key_backup_profile switch.
     echo Run the command with -h or --help for more details.
     exit 1
-elif [ "$key_name_prefix" != "" ] && [ "$arg_name_prefix" == "" ]; then
-    echo Please specify the name prefix. Or omit the $key_name_prefix switch.
+elif [ "$key_backup_filename" != "" ] && [ "$arg_backup_filename" == "" ]; then
+    echo Please specify the name prefix. Or omit the $key_backup_filename switch.
     echo Run the command with -h or --help for more details.
     exit 1
 fi
@@ -296,9 +294,9 @@ if [ "$backup_profile" != "" ]; then
         backup_type=$(echo $settings_backup_type | head -n1 | cut -d= -f2-)
     fi
 
-    settings_name_prefix=$(cat "$backup_profile" | tr -d " " | grep ^name_prefix=)
-    if [ "$settings_name_prefix" != "" ]; then
-        name_prefix=$(echo $settings_name_prefix | head -n1 | cut -d= -f2-)
+    settings_backup_filename=$(cat "$backup_profile" | tr -d " " | grep ^backup_filename=)
+    if [ "$settings_backup_filename" != "" ]; then
+        backup_filename=$(echo $settings_backup_filename | head -n1 | cut -d= -f2-)
     fi
 
     for upload_to in $(cat "$backup_profile" | tr -d " " | grep ^upload_to= | cut -d= -f2-); do
@@ -335,8 +333,8 @@ if [ "$arg_backup_type" != "" ]; then
     backup_type="$arg_backup_type"
 fi
 
-if [ "$arg_name_prefix" != "" ]; then
-    name_prefix="$arg_name_prefix"
+if [ "$arg_backup_filename" != "" ]; then
+    backup_filename="$arg_backup_filename"
 fi
 
 if [ "$key_remove_local" != "" ] && [ "$arg_remove_local" == "" ]; then
@@ -388,36 +386,48 @@ if [ "$zip_pass" != "" ]; then
     zip_pass_opt=-p"$zip_pass"
 fi
 
-[ "$name_prefix" == "" ] && name_prefix=mysqldumper.$backup_type
+[ "$backup_filename" == "" ] && backup_filename="mysqldumper.$backup_type.%Y-%m-%d.%H%M"
+
+backup_filename_regex="$backup_filename"
+backup_filename_regex="${backup_filename_regex//\./\\\.}"
+
+backup_filename_wildcard="$backup_filename"
+
+date_elements="a A b B c C d D e F g G h H I j k l m M n N p P q r R s S t T u U V w W x X y Y z :z ::z :::z Z"
+for x in $date_elements; do
+    backup_filename="${backup_filename/\%$x/$(date +%$x)}"
+    backup_filename_regex="${backup_filename_regex/\%$x/.*}"
+    backup_filename_wildcard="${backup_filename_wildcard/\%$x/*}"
+done
 
 # Full backup
 if [ "$backup_type" == "full" ]; then
-    mysqldump --no-tablespaces --all-databases > "$backup_dir/$name_prefix.$DATE.$TIME.sql" || exit 1
-    tar -C "$backup_dir" -cf - $name_prefix.$DATE.$TIME.sql --remove-files | 7z a -si $zip_pass_opt "$backup_dir/$name_prefix.$DATE.$TIME.$EXT" &>/dev/null
+    mysqldump --no-tablespaces --all-databases > "$backup_dir/$backup_filename.sql" || exit 1
+    tar -C "$backup_dir" -cf - $backup_filename.sql --remove-files | 7z a -si $zip_pass_opt "$backup_dir/$backup_filename.$EXT" &>/dev/null
     if [ $? -ne 0 ]; then
         echo Error: the script has encountered an error during the 7z compression process
         exit 1
     fi
-    chmod 640 "$backup_dir/$name_prefix.$DATE.$TIME.$EXT"
+    chmod 640 "$backup_dir/$backup_filename.$EXT"
 
 # Split backup
 elif [ "$backup_type" == "split" ]; then
 	databases=$(mysql -e "show databases" | tail -n+2 | grep -v -e information_schema -e mysql -e performance_schema -e sys) || exit 1
 	for db in $databases; do
-		mkdir -p "$backup_dir/mysql.$DATE.$TIME"
+		mkdir -p "$backup_dir/mysql"
 
 		tables=$(mysql -D $db -e "show tables" | tail -n+2) || exit 1
 		for table in $tables; do
-			mysqldump --no-tablespaces $db $table > "$backup_dir/mysql.$DATE.$TIME/mysql.$DATE.$TIME.$db.$table.sql" || exit 1
+			mysqldump --no-tablespaces $db $table > "$backup_dir/mysql/mysql.$db.$table.sql" || exit 1
 		done
 	done
 	
-    tar -C "$backup_dir" -cf - mysql.$DATE.$TIME --remove-files | 7z a -si $zip_pass_opt "$backup_dir/$name_prefix.$DATE.$TIME.$EXT" &>/dev/null
+    tar -C "$backup_dir" -cf - mysql --remove-files | 7z a -si $zip_pass_opt "$backup_dir/$backup_filename.$EXT" &>/dev/null
     if [ $? -ne 0 ]; then
         echo Error: the script has encountered an error during the 7z compression process
         exit 1
     fi
-    chmod 640 "$backup_dir/$name_prefix.$DATE.$TIME.$EXT"
+    chmod 640 "$backup_dir/$backup_filename.$EXT"
 fi
 
 # Init cloud drives API and upload
@@ -473,14 +483,14 @@ for ((i = 0; i < ${#cloud_drives[@]}; i++)); do
         # Upload to drive
         [ "$cloud_folder" != "" ] && opt_folder=", parents: [\"$cloud_folder\"]" || opt_folder=""
         curl -s -X POST -H "Authorization: Bearer $auth_token" \
-                -F "metadata={name :\"$name_prefix.$DATE.$TIME.$EXT\"$opt_folder};type=application/json;charset=UTF-8;" \
-                -F "file=@$backup_dir/$name_prefix.$DATE.$TIME.$EXT;type=application/zip" \
+                -F "metadata={name :\"$backup_filename.$EXT\"$opt_folder};type=application/json;charset=UTF-8;" \
+                -F "file=@$backup_dir/$backup_filename.$EXT;type=application/zip" \
                 "https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart" &>/dev/null
 
         # Housekeeping
         if [ $backup_count -gt 0 ]; then
             [ "$cloud_folder" == "" ] && cloud_folder=root
-            files_url="https://www.googleapis.com/drive/v3/files?orderBy=name&q=%22$cloud_folder%22%20in%20parents%20and%20name%20contains%20%22$name_prefix%22"
+            files_url="https://www.googleapis.com/drive/v3/files?orderBy=name&q=%22$cloud_folder%22%20in%20parents%20and%20name%20contains%20%22$backup_filename_wildcard%22"
             files=$(curl -s -H "Authorization: Bearer $auth_token" $files_url | tr -d " " | grep ^\"id\": | cut -d\" -f4 )
             current_count=$(echo $files | wc -w)
             remove_count=$((current_count-backup_count))
@@ -496,12 +506,12 @@ done
 
 # Remove local copy
 if [ "$remove_local" == "y" ]; then
-    rm "$backup_dir/$name_prefix.$DATE.$TIME.$EXT"
+    rm "$backup_dir/$backup_filename.$EXT"
 fi
 
 # Local housekeep
 if [[ $backup_count -gt 0 && "$remove_local" != "y" ]]; then
-    files=$(ls $backup_dir | grep -E "^mysql\.$backup_type\.[0-9]{4}-[0-9]{2}-[0-9]{2}\.[0-9]{4}\.$EXT$")
+    files=$(ls $backup_dir | grep -E "^$backup_filename_regex\.$EXT$")
     current_count=$(echo $files | wc -w)
     remove_count=$((current_count-backup_count))
 
