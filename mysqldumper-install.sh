@@ -6,6 +6,7 @@ CRON_USER_HOME=/srv/mysqldumper
 DUMP_FOLDER=mysqldumps
 DUMP_SCRIPT=mysqldump.sh
 PRESETS_FOLDER=presets
+DRIVE_PROFILES_DIR=$CRON_USER_HOME/drive_profiles
 
 DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
 
@@ -515,7 +516,7 @@ chown $CRON_USER_NAME:$CRON_USER_NAME $CRON_USER_HOME/$DUMP_SCRIPT
 chmod 750 $CRON_USER_HOME/$DUMP_SCRIPT
 
 if [ -f $CRON_USER_HOME/.my.cnf ]; then
-    echo -e "\nThe file $CRON_USER_HOME/.my.cnf already exists"
+    echo "The file $CRON_USER_HOME/.my.cnf already exists"
     read -p "Enter \"y\" to reconfigure and overwrite current settings: " choice
 else
     choice=y
@@ -523,7 +524,7 @@ fi
 
 if [ "$choice" == y ]; then
     # Prompt mysql information
-    echo -e "\nPlease enter the following MySql information:"
+    echo "Please enter the following MySql information:"
 
     mysql_host=$(get_input 0 Host $CRON_USER_HOME/.my.cnf host localhost)
     mysql_port=$(get_input 0 Port $CRON_USER_HOME/.my.cnf port 3306)
@@ -563,159 +564,169 @@ else
     echo Skipping MySQL setup
 fi
 
-# Confirm existing profiles
-preset_count=$(ls $CRON_USER_HOME/$PRESETS_FOLDER | wc -l)
-if [ "$preset_count" -gt 0 ]; then
-    echo -e "\nPlease confirm if you would like to keep the presets below:"
-    for preset in "$CRON_USER_HOME/$PRESETS_FOLDER/"*; do
-        prompt_message="$(echo $preset | cut -d/ -f5-)? (y|n) [y]: "
-        read -p "$prompt_message" keep_preset
-        while [ "$keep_preset" != y ] && [ "$keep_preset" != n ] && [ "$keep_preset" != "" ]; do
-            echo Error: Invalid option. Please try again.
-            read -p "$prompt_message" keep_preset
-        done
-        if [ "$keep_preset" == n ]; then
-            rm -rf $preset
-            preset=$preset'/settings.txt'
-            preset=${preset//\//\\\/} # Escape /
-            preset=${preset//\./\\\.} # Escape .
-            sed -i "/.* -p $preset'/d" $CRON_TAB_FILE
-        fi
-    done
-fi
-
-# Prompt preset information
 while true; do
-    # Check if creating preset needed
-    printf "\n"
-    preset_count=$(ls $CRON_USER_HOME/$PRESETS_FOLDER | wc -l)
-    if [ "$preset_count" == 0 ]; then
-        echo "Creating your first preset..."
-    else
-        read -p "Would you like to create another preset? (y|n) [n]: " preset_create
-        while [ "$preset_create" != y ] && [ "$preset_create" != n ] && [ "$preset_create" != "" ]; do
-            echo Error: Invalid option. Please try again.
-            read -p "Would you like to create another preset? (y|n) [n]: " preset_create
+    echo -e "\nChoose an operation:"
+    echo [1] Create a new backup profile
+    echo [2] List existing backup profiles
+    echo [3] Delete an existing backup profile
+    echo [4] Create a new cloud drive profile
+    echo [5] List existing cloud drive profiles
+    echo [6] Delete an existing cloud drive profile
+    echo [ ] Exit Installer
+    read -p "Your choice []: " choice
+    echo
+    sleep .5
+
+    if [ "$choice" == "" ]; then
+        exit
+    elif [ $choice == 1 ]; then
+        # Preset name
+        preset_no=1
+        while [ -d $CRON_USER_HOME/$PRESETS_FOLDER/Preset$preset_no ]; do
+            preset_no=$((preset_no+1))
         done
-        [[ "$preset_create" == n || "$preset_create" == "" ]] && break
-    fi
-    
-    # Preset name
-    preset_no=1
-    while [ -d $CRON_USER_HOME/$PRESETS_FOLDER/Preset$preset_no ]; do
-        preset_no=$((preset_no+1))
-    done
-    read -p "What would like to name this preset? [Preset$preset_no]: " preset_name
-    if [ "$preset_name" == "" ]; then
-        preset_name=Preset$preset_no
-    fi
+        read -p "What would like to name this preset? [Preset$preset_no]: " preset_name
+        [ "$preset_name" == "" ] && preset_name=Preset$preset_no
 
-    # Cronjob schedule
-    echo "How often to perform this backup?
-    [1] - every hour
-    [2] - every day at 0400H
-    [3] - every day at 0000H and 1200H
-    [4] - every Sunday at 0400H
-    [5] - every month on the 1st at 0400H
-    []  - Custom - You will edit the cronjob file later"
-    read -p "Your choice []: " cronjob_schedule_option
-    while [ "$cronjob_schedule_option" != "" ] && \
-            [ "$cronjob_schedule_option" != "1" ] && \
-            [ "$cronjob_schedule_option" != "2" ] && \
-            [ "$cronjob_schedule_option" != "3" ] && \
-            [ "$cronjob_schedule_option" != "4" ] && \
-            [ "$cronjob_schedule_option" != "5" ]; do
+        # Cronjob schedule
+        echo "How often to perform this backup?
+        [1] - every hour
+        [2] - every day at 0400H
+        [3] - every day at 0000H and 1200H
+        [4] - every Sunday at 0400H
+        [5] - every month on the 1st at 0400H
+        []  - Custom - You will edit the cronjob file later"
         read -p "Your choice []: " cronjob_schedule_option
-    done
+        cronjob_schedule_options="\  1 2 3 4 5"
+        while [[ ! ${cronjob_schedule_options[*]} =~ "$cronjob_schedule_option" ]]; do
+            read -p "Your choice []: " cronjob_schedule_option
+        done
 
-    if [ "$cronjob_schedule_option" == "1" ]; then
-        cronjob_schedule="0 * * * *"
-    elif [ "$cronjob_schedule_option" == "2" ]; then
-        cronjob_schedule="0 4 * * *"
-    elif [ "$cronjob_schedule_option" == "3" ]; then
-        cronjob_schedule="0 0,12 * * *"
-    elif [ "$cronjob_schedule_option" == "4" ]; then
-        cronjob_schedule="0 4 * * 0"
-    elif [ "$cronjob_schedule_option" == "5" ]; then
-        cronjob_schedule="0 4 1 * *"
-    else
+        [ "$cronjob_schedule_option" == "1" ] && cronjob_schedule="0 * * * *" || \
+        [ "$cronjob_schedule_option" == "2" ] && cronjob_schedule="0 4 * * *" || \
+        [ "$cronjob_schedule_option" == "3" ] && cronjob_schedule="0 0,12 * * *" || \
+        [ "$cronjob_schedule_option" == "4" ] && cronjob_schedule="0 4 * * 0" || \
+        [ "$cronjob_schedule_option" == "5" ] && cronjob_schedule="0 4 1 * *" || \
         cronjob_schedule="#* * * * *"
-    fi
 
-    # Housekeep info
-    backup_count=$(get_input 0 "How many copies of this backup to keep?" - - 30)
+        # Housekeep info
+        backup_count=$(get_input 0 "How many copies of this backup to keep?" - - 30)
 
-    # Zip password info
-    zip_pass=$(get_input 1 "What password to use for 7z? (Leave blank for no password)")
-    printf "\n"
-    while [ ${#zip_pass} -gt 0 ] && [ ${#zip_pass} -le 4 ]; do
-        echo -e "\n7z Password should be more than 4 characters."
+        # Zip password info
         zip_pass=$(get_input 1 "What password to use for 7z? (Leave blank for no password)")
         printf "\n"
-    done
-
-    # Create preset folder
-    mkdir -p $CRON_USER_HOME/$PRESETS_FOLDER/$preset_name
-    chown $CRON_USER_NAME:$CRON_USER_NAME $CRON_USER_HOME/$PRESETS_FOLDER/$preset_name
-    chmod 750 $CRON_USER_HOME/$PRESETS_FOLDER/$preset_name
-
-    # Save configuration
-    echo -n "Saving settings to \"$CRON_USER_HOME/$PRESETS_FOLDER/$preset_name/settings.txt\"... "
-    echo "name_prefix=mysqldumper.$preset_name" > $CRON_USER_HOME/$PRESETS_FOLDER/$preset_name/settings.txt
-    echo "backup_dir=$CRON_USER_HOME/$DUMP_FOLDER" >> $CRON_USER_HOME/$PRESETS_FOLDER/$preset_name/settings.txt
-    echo "backup_count=$backup_count" >> $CRON_USER_HOME/$PRESETS_FOLDER/$preset_name/settings.txt
-    if [ "$zip_pass" != "" ]; then
-        zip_pass=${zip_pass//\"/\\\"} # Escape /
-        echo "zip_pass=$zip_pass" >> $CRON_USER_HOME/$PRESETS_FOLDER/$preset_name/settings.txt
-    fi
-    echo Done!
-    echo -n "Writing cronjob schedule to \"$CRON_TAB_FILE\"... "
-    echo "$cronjob_schedule root su - $CRON_USER_NAME -s /bin/bash -c '$CRON_USER_HOME/$DUMP_SCRIPT -p $CRON_USER_HOME/$PRESETS_FOLDER/$preset_name/settings.txt'" >> $CRON_TAB_FILE
-    echo Done!
-
-    # Google Drive
-    printf "\n"
-    read -p "Would you also like to upload a copy of the backup file to Google Drive? (y|n) [n]: " upload_to_google
-    while [ "$upload_to_google" != y ] && [ "$upload_to_google" != n ] && [ "$upload_to_google" != "" ]; do
-        echo Error: Invalid option! Please try again.
-        read -p "Would you also like to upload a copy of the backup file to Google Drive? (y|n) [n]: " upload_to_google
-    done
-    if [ "$upload_to_google" == y ]; then
-        echo Please provide the following information for Google Drive API:
-        read -p "Client ID: " client_id
-        read -p "Client secret: " client_secret
-        read -p "Refresh token: " refresh_token
-        read -p "Folder ID: " folder_id
-        echo -n "Saving Google Drive configurations to \"$CRON_USER_HOME/$PRESETS_FOLDER/$preset_name/settings.txt\"... "
-        echo "upload_to=google" >> $CRON_USER_HOME/$PRESETS_FOLDER/$preset_name/settings.txt
-        echo "client_id=$client_id" >> $CRON_USER_HOME/$PRESETS_FOLDER/$preset_name/settings.txt
-        echo "client_secret=$client_secret" >> $CRON_USER_HOME/$PRESETS_FOLDER/$preset_name/settings.txt
-        echo "refresh_token=$refresh_token" >> $CRON_USER_HOME/$PRESETS_FOLDER/$preset_name/settings.txt
-        echo "folder_id=$folder_id" >> $CRON_USER_HOME/$PRESETS_FOLDER/$preset_name/settings.txt
-        echo Done!
-    fi
-
-    # Remove local
-    if [ "$upload_to_google" == y ]; then
-        printf "\n"
-        read -p "Would you like to remove the local copy after uploading to cloud drive(s)? (y|n) [n]: " remove_local
-        while [ "$remove_local" != y ] && [ "$remove_local" != n ] && [ "$remove_local" != "" ]; do
-            echo Error: Invalid option! Please try again.
-            read -p "Would you like to remove the local copy after uploading to cloud drive(s)? (y|n) [n]: " remove_local
+        while [ ${#zip_pass} -gt 0 ] && [ ${#zip_pass} -le 4 ]; do
+            echo -e "\n7z Password should be more than 4 characters."
+            zip_pass=$(get_input 1 "What password to use for 7z? (Leave blank for no password)")
+            printf "\n"
         done
-        if [ "$remove_local" == y ]; then
-            echo -n "Updating the settings in \"$CRON_USER_HOME/$PRESETS_FOLDER/$preset_name/settings.txt\"... "
-            echo "remove_local=y" >> $CRON_USER_HOME/$PRESETS_FOLDER/$preset_name/settings.txt
-            echo Done!
+
+        # Create preset folder
+        mkdir -p $CRON_USER_HOME/$PRESETS_FOLDER/$preset_name
+        chown $CRON_USER_NAME:$CRON_USER_NAME $CRON_USER_HOME/$PRESETS_FOLDER/$preset_name
+        chmod 750 $CRON_USER_HOME/$PRESETS_FOLDER/$preset_name
+
+        # Save configuration
+        echo -n "Saving settings to \"$CRON_USER_HOME/$PRESETS_FOLDER/$preset_name/settings.txt\"... "
+        echo "backup_filename=mysqldumper.$preset_name" > $CRON_USER_HOME/$PRESETS_FOLDER/$preset_name/settings.txt
+        echo "backup_dir=$CRON_USER_HOME/$DUMP_FOLDER" >> $CRON_USER_HOME/$PRESETS_FOLDER/$preset_name/settings.txt
+        echo "backup_count=$backup_count" >> $CRON_USER_HOME/$PRESETS_FOLDER/$preset_name/settings.txt
+        if [ "$zip_pass" != "" ]; then
+            zip_pass=${zip_pass//\"/\\\"} # Escape /
+            echo "zip_pass=$zip_pass" >> $CRON_USER_HOME/$PRESETS_FOLDER/$preset_name/settings.txt
         fi
+        echo Done!
+        echo -n "Writing cronjob schedule to \"$CRON_TAB_FILE\"... "
+        echo "$cronjob_schedule root su - $CRON_USER_NAME -s /bin/bash -c '$CRON_USER_HOME/$DUMP_SCRIPT -p $CRON_USER_HOME/$PRESETS_FOLDER/$preset_name/settings.txt'" >> $CRON_TAB_FILE
+        echo Done!
+    elif [ $choice == 2 ]; then
+        if [ $(ls "$CRON_USER_HOME/$PRESETS_FOLDER" | wc -l) -gt 0 ]; then
+            echo -e "\nExisting backup profiles:"
+            ls -l "$CRON_USER_HOME/$PRESETS_FOLDER" | tail -n +2 | tr -s \ | cut -d\  -f9 | while read backup_profile; do
+                echo " - $backup_profile"
+            done
+            echo && read -s -p "Press enter to continue..." && echo
+        else
+            echo There are no existing backup profiles... Loading menu...
+        fi
+    elif [ $choice == 3 ]; then
+        if [ $(ls "$CRON_USER_HOME/$PRESETS_FOLDER" | wc -l) -gt 0 ]; then
+            sleep 0.5
+            read -p "Enter backup profile to be deleted (Leave blank to return to menu): " backup_profile
+            if [ "$backup_profile" == "" ]; then
+                echo Operation cancelled... Loading menu...
+                sleep .5
+            elif [ -d "$CRON_USER_HOME/$PRESETS_FOLDER/$backup_profile" ]; then
+                rm -rf "$CRON_USER_HOME/$PRESETS_FOLDER/$backup_profile"
+                echo The backup profile was removed: $backup_profile... Loading menu...
+                sleep .5
+            else
+                echo Error: the backup profile does not exist: $backup_profile... Loading menu...
+                sleep .5
+            fi
+        else
+            echo There are no backup profiles to remove... Loading menu...
+            sleep .5
+        fi
+    elif [ $choice == 4 ]; then
+        read -p "Cloud drive profile name (Leave blank to return to menu): " drive_profile_name
+        if [ "$drive_profile_name" == "" ]; then
+            echo Operation cancelled... Loading menu...
+            sleep .5
+        elif [ -d "$DRIVE_PROFILES_DIR/$drive_profile_name" ]; then
+            echo Operation failed; Cloud drive profile already exists: $drive_profile_name... Loading menu...
+            sleep .5
+        else
+            echo -e "\nWhich service are you uploading to?"
+            echo "[1] Google Drive"
+            echo "[ ] Cancel and return to menu"
+            read -p "Your choice: " drive_option
+            if [ "$drive_option" == "" ]; then
+                echo Operation cancelled... Loading menu...
+                sleep .5
+            elif [ $drive_option == 1 ]; then
+                read -p "Client ID: " client_id
+                read -p "Client secret: " client_secret
+                read -p "Refresh token: " refresh_token
+                echo "Saving Google Drive configurations"
+                mkdir "$DRIVE_PROFILES_DIR/$drive_profile_name"
+                echo "upload_to=google" > "$DRIVE_PROFILES_DIR/$drive_profile_name/settings.txt"
+                echo "client_id=$client_id" >> "$DRIVE_PROFILES_DIR/$drive_profile_name/settings.txt"
+                echo "client_secret=$client_secret" >> "$DRIVE_PROFILES_DIR/$drive_profile_name/settings.txt"
+                echo "refresh_token=$refresh_token" >> "$DRIVE_PROFILES_DIR/$drive_profile_name/settings.txt"
+            fi
+        fi
+    elif [ $choice == 5 ]; then
+        if [ $(ls "$DRIVE_PROFILES_DIR" | wc -l) -gt 0 ]; then
+            echo -e "\nExisting drive profiles:"
+            ls -l "$DRIVE_PROFILES_DIR" | tail -n +2 | tr -s \ | cut -d\  -f9 | while read drive_profile; do
+                echo " - $drive_profile"
+            done
+            echo && read -s -p "Press enter to continue..." && echo
+        else
+            echo There are no existing cloud drive profiles... Loading menu...
+            sleep .5
+        fi
+    elif [ $choice == 6 ]; then
+        if [ $(ls "$DRIVE_PROFILES_DIR" | wc -l) -gt 0 ]; then
+            read -p "Enter cloud drive profile to be deleted (Leave blank to return to menu): " drive_profile
+            if [ "$drive_profile" == "" ]; then
+                echo Operation cancelled... Loading menu...
+                sleep .5
+            elif [ -d "$DRIVE_PROFILES_DIR/$drive_profile" ]; then
+                rm -rf "$DRIVE_PROFILES_DIR/$drive_profile"
+                echo The cloud drive profile was removed: $drive_profile... Loading menu...
+                sleep .5
+            else
+                echo Error: the cloud drive profiles does not exist: $drive_profile... Loading menu...
+                sleep .5
+            fi
+        else
+            echo There are no cloud drive profiles to remove... Loading menu...
+                sleep .5
+        fi
+    else
+        echo Error: Invalid option: $choice... Loading menu...
+        sleep .5
     fi
-
-    # Done
-    printf "\n"
-    echo Preset configuration done! Please try the below command after the installation:
-    echo sudo su - $CRON_USER_NAME -s /bin/bash -c \'$CRON_USER_HOME/$DUMP_SCRIPT -p $CRON_USER_HOME/$PRESETS_FOLDER/$preset_name/settings.txt\'
 done
-
-# End
-echo -e "\nInstallation completed!"
-echo To execute script manually, run \"$CRON_USER_HOME/$DUMP_SCRIPT -h\" for more information
