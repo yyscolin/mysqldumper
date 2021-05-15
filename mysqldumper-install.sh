@@ -628,7 +628,7 @@ while true; do
 
         # Save configuration
         echo -n "Saving settings to \"$CRON_USER_HOME/$PRESETS_FOLDER/$preset_name/settings.txt\"... "
-        echo "backup_filename=mysqldumper.$preset_name" > $CRON_USER_HOME/$PRESETS_FOLDER/$preset_name/settings.txt
+        echo "backup_filename=mysqldumper.$preset_name.%Y-%m-%d.%H%M%S" > $CRON_USER_HOME/$PRESETS_FOLDER/$preset_name/settings.txt
         echo "backup_dir=$CRON_USER_HOME/$DUMP_FOLDER" >> $CRON_USER_HOME/$PRESETS_FOLDER/$preset_name/settings.txt
         echo "backup_count=$backup_count" >> $CRON_USER_HOME/$PRESETS_FOLDER/$preset_name/settings.txt
         if [ "$zip_pass" != "" ]; then
