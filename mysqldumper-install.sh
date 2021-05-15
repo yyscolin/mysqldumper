@@ -50,13 +50,11 @@ function get_input() {
     echo $value
 }
 
-# Start message
-echo -e "Installing MYSQLDUMP script for linux by Colin Ye - Installer v1.01\n"
+echo -e "Welcome to the installer for MYSQLDUMP script for linux by Colin Ye v1.02\n"
 
-# Setup cronjob user
-echo -n "Adding system account \"$CRON_USER_NAME\"... "
 cron_user_exists=$(grep -c ^$CRON_USER_NAME /etc/passwd)
 if [ "$cron_user_exists" == "0" ]; then
+    echo -n "Adding system account \"$CRON_USER_NAME\"... "
     opt_group=""
     opt_shell="-s /bin/false"
 
@@ -68,33 +66,23 @@ if [ "$cron_user_exists" == "0" ]; then
     mkdir -p $CRON_USER_HOME
     useradd -r -d $CRON_USER_HOME $opt_shell $opt_group $CRON_USER_NAME
     echo Done!
-else
-    echo "Already exists; Skipping..."
 fi
 
 mkdir -p $CRON_USER_HOME
 chown -R $CRON_USER_NAME:$CRON_USER_NAME $CRON_USER_HOME
 chmod 750 $CRON_USER_HOME
 
-echo -n "Creating $CRON_USER_HOME/$DUMP_FOLDER... "
 mkdir -p $CRON_USER_HOME/$DUMP_FOLDER
 chown $CRON_USER_NAME:$CRON_USER_NAME $CRON_USER_HOME/$DUMP_FOLDER
 chmod 750 $CRON_USER_HOME/$DUMP_FOLDER
-echo Done!
 
-echo -n "Creating $CRON_USER_HOME/$PRESETS_FOLDER... "
 mkdir -p $CRON_USER_HOME/$PRESETS_FOLDER
 chown $CRON_USER_NAME:$CRON_USER_NAME $CRON_USER_HOME/$PRESETS_FOLDER
 chmod 750 $CRON_USER_HOME/$PRESETS_FOLDER
-echo Done!
 
-echo -n "Creating $CRON_TAB_FILE... "
 touch -a $CRON_TAB_FILE
 chmod 644 $CRON_TAB_FILE
-echo Done!
 
-# Setup mysqldump script
-echo -n "Generating mysqldump script $CRON_USER_HOME/$DUMP_SCRIPT... "
 echo '#!/bin/bash
 
 DIR_SCRIPT="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
@@ -525,7 +513,6 @@ fi
 ' > $CRON_USER_HOME/$DUMP_SCRIPT
 chown $CRON_USER_NAME:$CRON_USER_NAME $CRON_USER_HOME/$DUMP_SCRIPT
 chmod 750 $CRON_USER_HOME/$DUMP_SCRIPT
-echo Done!
 
 if [ -f $CRON_USER_HOME/.my.cnf ]; then
     echo -e "\nThe file $CRON_USER_HOME/.my.cnf already exists"
