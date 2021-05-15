@@ -505,7 +505,7 @@ if [[ $backup_count -gt 0 && "$remove_local" != "y" ]]; then
     current_count=$(echo $files | wc -w)
     remove_count=$((current_count-backup_count))
 
-    if [$remove_count -gt 0 ]; then
+    if [ $remove_count -gt 0 ]; then
         files_to_delete=$(echo $files | cut -d\  -f-$((remove_count)))
         for file in $files_to_delete; do
             rm "$backup_dir/$file"
