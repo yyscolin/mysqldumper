@@ -517,43 +517,54 @@ chown $CRON_USER_NAME:$CRON_USER_NAME $CRON_USER_HOME/$DUMP_SCRIPT
 chmod 750 $CRON_USER_HOME/$DUMP_SCRIPT
 echo Done!
 
-# Prompt mysql information
-echo -e "\nPlease enter the following MySql information:"
-
-mysql_host=$(get_input 0 Host $CRON_USER_HOME/.my.cnf host localhost)
-mysql_port=$(get_input 0 Port $CRON_USER_HOME/.my.cnf port 3306)
-
-mysql_user=$(get_input 0 User $CRON_USER_HOME/.my.cnf user)
-while [ "$mysql_user" == "" ]; do
-    mysql_user=$(get_input 0 User $CRON_USER_HOME/.my.cnf user)
-done
-
-mysql_pass=$(get_input 1 Password $CRON_USER_HOME/.my.cnf password)
-printf "\n"
-while [ "$mysql_pass" == "" ]; do
-    mysql_pass=$(get_input 1 Password $CRON_USER_HOME/.my.cnf password)
-    printf "\n"
-done
-
-echo -n "Testing MySql connection... "
-mysql -h $mysql_host -P $mysql_port -u $mysql_user -p"$mysql_pass" -e "show databases" &>/dev/null
-if [ $? -eq 0 ]; then
-    echo Passed!
+if [ -f $CRON_USER_HOME/.my.cnf ]; then
+    echo -e "\nThe file $CRON_USER_HOME/.my.cnf already exists"
+    read -p "Enter \"y\" to reconfigure and overwrite current settings: " choice
 else
-    echo Failed! Please verify your inputs and run this script again.
-    exit 13
+    choice=y
 fi
 
-# Store mysql information
-echo -n "Saving MySql configuration to \"$CRON_USER_HOME/.my.cnf\"... "
-echo "[client]
-host = $mysql_host
-port = $mysql_port
-user = $mysql_user
-password = $mysql_pass" > $CRON_USER_HOME/.my.cnf
-chown $CRON_USER_NAME:$CRON_USER_NAME $CRON_USER_HOME/.my.cnf
-chmod 640 $CRON_USER_HOME/.my.cnf
-echo Done!
+if [ "$choice" == y ]; then
+    # Prompt mysql information
+    echo -e "\nPlease enter the following MySql information:"
+
+    mysql_host=$(get_input 0 Host $CRON_USER_HOME/.my.cnf host localhost)
+    mysql_port=$(get_input 0 Port $CRON_USER_HOME/.my.cnf port 3306)
+
+    mysql_user=$(get_input 0 User $CRON_USER_HOME/.my.cnf user)
+    while [ "$mysql_user" == "" ]; do
+        mysql_user=$(get_input 0 User $CRON_USER_HOME/.my.cnf user)
+    done
+
+    mysql_pass=$(get_input 1 Password $CRON_USER_HOME/.my.cnf password)
+    printf "\n"
+    while [ "$mysql_pass" == "" ]; do
+        mysql_pass=$(get_input 1 Password $CRON_USER_HOME/.my.cnf password)
+        printf "\n"
+    done
+
+    echo -n "Testing MySql connection... "
+    mysql -h $mysql_host -P $mysql_port -u $mysql_user -p"$mysql_pass" -e "show databases" &>/dev/null
+    if [ $? -eq 0 ]; then
+        echo Passed!
+    else
+        echo Failed! Please verify your inputs and run this script again.
+        exit 1
+    fi
+
+    # Store mysql information
+    echo -n "Saving MySql configuration to \"$CRON_USER_HOME/.my.cnf\"... "
+    echo "[client]
+    host = $mysql_host
+    port = $mysql_port
+    user = $mysql_user
+    password = $mysql_pass" > $CRON_USER_HOME/.my.cnf
+    chown $CRON_USER_NAME:$CRON_USER_NAME $CRON_USER_HOME/.my.cnf
+    chmod 640 $CRON_USER_HOME/.my.cnf
+    echo Done!
+else
+    echo Skipping MySQL setup
+fi
 
 # Confirm existing profiles
 preset_count=$(ls $CRON_USER_HOME/$PRESETS_FOLDER | wc -l)
