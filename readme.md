@@ -1,6 +1,6 @@
 # MySqlDumper
 
-## Mysqldump Script for Linux v1.01
+## Mysqldump Script for Linux v1.02
 Mysqldumper is a script to automate the backing up of a MySql database and 7-zipping it up.
 Common practice is to compress using gzip but that does not offer pass protection for the archive.
 
@@ -17,6 +17,7 @@ sudo apt update && sudo apt install -y p7zip-full
 - Answer the questions that you are prompted
 - [Optional] Edit the crontab `/etc/cron.d/mysqldump`
 - [Optional] Add users to the `mysqldumper` group
+- [Optional] To upload backups to a cloud drive, edit the backup profile and add `upload-to=<drive-settings-fullpath>:<cloud-folder>`
 - Done!
 
 ## Working Principles
