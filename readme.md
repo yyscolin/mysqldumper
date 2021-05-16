@@ -16,7 +16,8 @@ sudo apt update && sudo apt install -y p7zip-full
 - Set permission to 640 for my.cnf
 - Duplicate the file `backup-profiles/example` and edit accorindingly
 - If remote drives are used, duplicated and edit the neccesary files in the folder `remote_drive_profiles`
-- Create a linux service account for the cronjob `useradd -r -d -M -s /bin/false mysqldumper`
+- Create a linux service account for the cronjob `useradd -r -M -s /bin/false mysqldumper`
+- Change owner of the folder and sub directories to mysqldumper
 - Create a cronjob file `/etc/cron.d/mysqldump` with the cronjob entries. For example:
 ```
 * * * * * root su - mysqldumper -s /bin/bash -c '/full/path/to/script/mysqldump.sh backup_profile_name'
