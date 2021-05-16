@@ -1,0 +1,6 @@
+remote_type=google
+
+# The authentication information required to access Google Drive
+client_id=
+client_secret=
+refresh_token=
