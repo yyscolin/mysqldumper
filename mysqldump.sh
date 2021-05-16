@@ -106,6 +106,8 @@ for ((i = 0; i < ${#drives[@]}; i++)); do
         local_filename_parsed=$(parse_filename $local_filename)
         [ "$zip_pass" != "" ] && zip_pass=-p$zip_pass
         
+        mkdir -p "$local_dir"
+
         if [ $backup_type == "full" ]; then
             mysqldump --defaults-extra-file="$DIR_SCRIPT/my.cnf" --no-tablespaces --all-databases > "$local_dir/$local_filename_parsed.sql" || exit 1
             tar -C "$local_dir" -cf - $local_filename_parsed.sql --remove-files | 7z a -si "$zip_pass" "$local_dir/$local_filename_parsed.tar.7z" &>/dev/null
