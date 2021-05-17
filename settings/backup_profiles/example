@@ -20,7 +20,7 @@
 # The password used to encrypt the output zip file
 # This is compulsory for security reasons
 # Spaces are not allowed
-zip_password=
+zip_pass=
 
 
 
