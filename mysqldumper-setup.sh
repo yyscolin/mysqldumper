@@ -1,7 +1,5 @@
 #!/bin/bash
 
-apt install -y p7zip-full
-
 useradd -r -M -d /srv/mysqldumper -s /bin/bash mysqldumper
 
 touch /srv/mysqldumper/my.cnf
