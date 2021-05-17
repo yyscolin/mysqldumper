@@ -89,6 +89,7 @@ for ((i = 0; i < ${#drives[@]}; i++)); do
             [ "$value" == "" ] && value="${DEFAULTS[$key]}"
             printf -v $key %s "$value"
         done
+
         [ ${local_dir:0:1} != "/" ] && local_dir=$dir/$local_dir
         if [ ! -d "$local_dir" ]; then
             mkdir -p "$local_dir" || exit 1
