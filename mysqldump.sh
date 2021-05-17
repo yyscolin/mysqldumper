@@ -150,7 +150,7 @@ for ((i = 0; i < ${#drives[@]}; i++)); do
 
         if [ $remote_count != "" ]; then
             [ "$remote_folder" == "" ] && remote_folder=root
-            files_url="https://www.googleapis.com/drive/v3/files?orderBy=name&q=%22$remote_folder%22%20in%20parents%20and%20mimeType%20=%20%22application/zip%22"
+            files_url="https://www.googleapis.com/drive/v3/files?orderBy=createdTime&q=%22$remote_folder%22%20in%20parents%20and%20mimeType%20=%20%22application/zip%22"
             files=$(curl -s -H "Authorization: Bearer $auth_token" $files_url | tr -d " " | grep ^\"id\": | cut -d\" -f4 )
             current_count=$(echo $files | wc -w)
             remove_count=$((current_count-remote_count))
