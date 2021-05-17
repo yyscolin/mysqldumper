@@ -1,5 +1,4 @@
 my.cnf
-mysqldumps/*
 settings/backup_profiles/*
 !settings/backup_profiles/example
 settings/remote_drive_profiles/*
