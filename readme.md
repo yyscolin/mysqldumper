@@ -10,18 +10,16 @@ p7zip-full
 #### For Debian/ Ubuntu
 sudo apt update && sudo apt install -y p7zip-full
 
-## Instructions
-- Clone this repository
-- Create my.cnf with mysql credentials in the folder
-- Set permission to 640 for my.cnf
-- Duplicate the file `backup-profiles/example` and edit accorindingly
-- If remote drives are used, duplicated and edit the neccesary files in the folder `remote_drive_profiles`
-- Create a linux service account for the cronjob `useradd -r -M -s /bin/false mysqldumper`
-- Change owner of the folder and sub directories to mysqldumper
-- Create a cronjob file `/etc/cron.d/mysqldump` with the cronjob entries. For example:
+## Instructions (with root/ sudo account)
+- Clone the repository and run the installer
 ```
-* * * * * root su - mysqldumper -s /bin/bash -c '/full/path/to/script/mysqldump.sh backup_profile_name'
+git clone https://github.com/yyscolin/mysqldumper.git /srv/mysqldumper
+/srv/mysqldumper/mysqldumper-setup.sh
 ```
+- Update the mysql credentials file `vim /srv/mysqldumper/my.cnf`
+- Duplicate and edit the files in "backup_profiles" and "remote_drive_profiles" as neccessary
+- Change ownership of /srv/mysqldumper `chown -R mysqldumper:mysqldumper /srv/mysqldumper`
+- Edit the crontab accordingly `vim /etc/cron.d/mysqldump`
 
 ## Working Principles
 Periodically run a backup and store it in the local and/or remote machine.

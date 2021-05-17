@@ -1,45 +1,44 @@
-# The number of copies of backup files to keep
-# Default is to keep all copies if unspecified
-# 0 means all will be removed after uploading to remote drive(s)
-local_count=30
-
 # The local directory to create the backup file
-# If full path is not specified, will use relative path from the executable script
-local_dir=mysqldumps
+# Path is relative to the executable script unless full path is given
+#local_dir=/var/mysqldumps/<backup-profile-name>
 
 # The naming convention to be used for backup filename
 # Will be appended with the file extension .tar.7z
 # You can use date elements, e.g. %y for 2-digits year
 # Date elements are the same as when using the `date` command
-local_filename=mysqldumper.%Y-%m-%d.%H%M%S
+#local_filename=mysqldump.%Y-%m-%d.%H%M%S
+
+# The number of .tar.7z files to keep in local directory
+# This will be done only after uploading to remote drive(s)
+# Skip this option to skip this housekeeping process
+#local_count=
 
 # The backup type to used
 # Can be either "full" or "split"
-# Default is "full" if unspecified
 #backup_type=full
 
 # The password used to encrypt the output zip file
-# Default is no password if unspecified
-#zip_password=
+# This is compulsory for security reasons
+# Spaces are not allowed
+zip_password=
+
+
 
 # This section allows the specification of remote backup
 # After the mysqldump and zip process is completed,
 # a copy can be sent to one or more remote drive profiles
 
-# Sample for Google Drive
-## State the cloud drive profile name in [] brackets
-###[example.google]
-## Option to upload as a filename different from local copy
-## Will be the same as local filename if unspecified
-###remote_filename=
-## Option to specify the number of remote copies to keep
-## Will be the same as local number if unspecified
-###remote_count=30
-## Specifies the ID of the Google Drive folder to upload to
-## Default is root folder if unspecified
-###remote_folder=
+# Google Drive
+# 1. State the cloud drive profile name in [] brackets
+# 2. Specify the Google Drive's folder ID to upload to
+#    The root folder will be used if unspecified (not recommended)
+# 3. Specify the filename to be uploaded as
+#    The same filename as the local copy will be used if unspecifed
+# 4. Specify if housekeeping is required
+#    This option refers to the number of files in the folder to keep
+# Refer to the template below
 
 [example.google]
-remote_filename=mysqldumper.google.%Y-%m-%d.%H%M%S
-remote_count=30
-remote_folder=1abcdefghijklmnopqrst12345678
+#remote_folder=
+#remote_filename=
+#remote_count=
