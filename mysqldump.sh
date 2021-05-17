@@ -99,23 +99,39 @@ for ((i = 0; i < ${#drives[@]}; i++)); do
         DEFAULTS[remote_filename]="$local_filename"
 
         local_filename=$(parse_filename $local_filename)
-        mkdir -p "$local_dir/$local_filename"
+        rm -rf "$local_dir/mysqldumper" || exit 1
+        rm -rf "$local_dir/mysqldumper.tar" || exit 1
+        mkdir -p "$local_dir/mysqldumper" || exit 1
+
         if [ $backup_type == "full" ]; then
-            mysqldump --defaults-extra-file="$dir/my.cnf" --no-tablespaces --all-databases > "$local_dir/$local_filename/$local_filename.sql" || exit 1
+            mysqldump --defaults-extra-file="$dir/my.cnf" --no-tablespaces --all-databases > "$local_dir/mysqldumper/mysqldump.sql" || exit 1
         elif [ $backup_type == "split" ]; then
-            databases=$(mysql -e "show databases" | tail -n+2 | grep -v -e information_schema -e mysql -e performance_schema -e sys) || exit 1
+            databases=$(mysql --defaults-extra-file="$dir/my.cnf" -e "show databases" | tail -n+2 | grep -v -e information_schema -e mysql -e performance_schema -e sys) || exit 1
             for db in $databases; do
-                tables=$(mysql -D $db -e "show tables" | tail -n+2) || exit 1
+                tables=$(mysql --defaults-extra-file="$dir/my.cnf" -D $db -e "show tables" | tail -n+2) || exit 1
                 for table in $tables; do
-                    mysqldump --defaults-extra-file="$dir/my.cnf" --no-tablespaces $db $table > "$local_dir/$local_filename/$db.$table.sql" || exit 1
+                    mysqldump --defaults-extra-file="$dir/my.cnf" --no-tablespaces $db $table > "$local_dir/mysqldumper/$db.$table.sql" || exit 1
                 done
             done
         else
             throw_error "invalid setting(s): $backup_profile_file: backup type: $backup_type"
         fi
 
-        tar -C "$local_dir" -cf - $local_filename --remove-files | 7z a -si -p$zip_pass "$local_dir/$local_filename.tar.7z" &>/dev/null
-        [ $? -ne 0 ] && throw_error 7z compression failed
+        pwd=$PWD
+        cd "$local_dir"
+        tar -cf "mysqldumper.tar" "mysqldumper"
+        [ $? -ne 0 ] && throw_error tar process failed
+        cd $pwd
+
+        7z a -p$zip_pass "/$local_dir/$local_filename.tar.7z" "$local_dir/mysqldumper.tar" &>/dev/null
+        if [ $? -ne 0 ]; then
+            rm -rf "$local_dir/mysqldumper" || exit 1
+            rm -rf "$local_dir/mysqldumper.tar" || exit 1
+            throw_error 7z compression failed
+        else
+            rm -rf "$local_dir/mysqldumper" || exit 1
+            rm -rf "$local_dir/mysqldumper.tar" || exit 1
+        fi
     else # Remote upload
         parameters="remote_type auth_token remote_filename remote_count remote_folder"
         for key in $parameters; do
@@ -150,7 +166,6 @@ done
 
 # Local housekeeping
 if [ "$local_count" != "" ]; then
-    local_filename_regexp=$(parse_filename $local_filename 1)
     files=$(ls "$local_dir" | grep .tar.7z$)
     current_count=$(echo $files | wc -w)
     remove_count=$((current_count-local_count))
